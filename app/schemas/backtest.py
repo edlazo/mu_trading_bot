@@ -9,6 +9,7 @@ class BacktestOutcome(StrEnum):
     STOP_HIT = "STOP_HIT"
     NO_RESULT = "NO_RESULT"
     ERROR = "ERROR"
+    AMBIGUOUS = "AMBIGUOUS"
 
 
 class BacktestResultResponse(BaseModel):

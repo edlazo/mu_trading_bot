@@ -86,6 +86,18 @@ def test_buy_decision_stop_hit_creates_backtest(client, db_session, monkeypatch)
     assert payload["exit_price"] == 95.0
     assert payload["pnl_percent"] == pytest.approx(-5.0)
 
+def test_buy_decision_ambiguous_when_target_and_stop_hit_same_candle(client, db_session, monkeypatch):
+    decision = _decision(db_session)
+    _mock_download(monkeypatch, _price_data([111.0, 106.0], [94.0, 96.0], [100.0, 101.0]))
+
+    response = client.post(f"/backtests/decisions/{decision.id}?days=10")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["result"] == BacktestOutcome.AMBIGUOUS
+    assert payload["exit_price"] is None
+    assert payload["pnl_percent"] is None
+
 
 def test_buy_decision_without_hit_creates_no_result(client, db_session, monkeypatch):
     decision = _decision(db_session)
@@ -118,6 +130,8 @@ def test_backtests_summary_calculates_metrics(client, db_session):
             BacktestResult(decision_id=1, alert_id=1, ticker="AAPL", result="TARGET_HIT", days_checked=1, pnl_percent=10.0, reason="target"),
             BacktestResult(decision_id=2, alert_id=2, ticker="MSFT", result="STOP_HIT", days_checked=1, pnl_percent=-5.0, reason="stop"),
             BacktestResult(decision_id=3, alert_id=3, ticker="NVDA", result="NO_RESULT", days_checked=10, pnl_percent=2.5, reason="none"),
+            BacktestResult(decision_id=4, alert_id=4, ticker="TSLA", result="AMBIGUOUS", days_checked=1, pnl_percent=None, reason="ambiguous"),
+            BacktestResult(decision_id=5, alert_id=5, ticker="AMD", result="ERROR", days_checked=0, pnl_percent=None, reason="error"),
         ]
     )
     db_session.commit()
@@ -126,13 +140,34 @@ def test_backtests_summary_calculates_metrics(client, db_session):
 
     assert response.status_code == 200
     assert response.json() == {
-        "total": 3,
+        "total": 5,
         "target_hit": 1,
         "stop_hit": 1,
         "no_result": 1,
-        "win_rate": pytest.approx(33.33333333333333),
+        "ambiguous": 1,
+        "error": 1,
+        "win_rate": pytest.approx(25.0),
         "average_pnl_percent": pytest.approx(2.5),
     }
+
+def test_backtests_summary_can_include_errors_in_win_rate(client, db_session):
+    db_session.add_all(
+        [
+            BacktestResult(decision_id=1, alert_id=1, ticker="AAPL", result="TARGET_HIT", days_checked=1, pnl_percent=10.0, reason="target"),
+            BacktestResult(decision_id=2, alert_id=2, ticker="MSFT", result="STOP_HIT", days_checked=1, pnl_percent=-5.0, reason="stop"),
+            BacktestResult(decision_id=3, alert_id=3, ticker="NVDA", result="NO_RESULT", days_checked=10, pnl_percent=2.5, reason="none"),
+            BacktestResult(decision_id=4, alert_id=4, ticker="TSLA", result="AMBIGUOUS", days_checked=1, pnl_percent=None, reason="ambiguous"),
+            BacktestResult(decision_id=5, alert_id=5, ticker="AMD", result="ERROR", days_checked=0, pnl_percent=None, reason="error"),
+        ]
+    )
+    db_session.commit()
+
+    response = client.get("/backtests/summary?include_errors=true")
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 5
+    assert response.json()["error"] == 1
+    assert response.json()["win_rate"] == pytest.approx(20.0)
 
 
 def test_backtest_does_not_duplicate_result_for_same_decision(client, db_session, monkeypatch):
@@ -147,11 +182,26 @@ def test_backtest_does_not_duplicate_result_for_same_decision(client, db_session
     assert first_response.json()["id"] == second_response.json()["id"]
     assert db_session.query(BacktestResult).count() == 1
 
+def test_backtest_force_recalculates_existing_result(client, db_session, monkeypatch):
+    decision = _decision(db_session)
+    _mock_download(monkeypatch, _price_data([105.0], [97.0], [102.0]))
+    first_response = client.post(f"/backtests/decisions/{decision.id}")
+
+    _mock_download(monkeypatch, _price_data([111.0], [99.0], [110.0]))
+    second_response = client.post(f"/backtests/decisions/{decision.id}?force=true")
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert first_response.json()["result"] == BacktestOutcome.NO_RESULT
+    assert second_response.json()["result"] == BacktestOutcome.TARGET_HIT
+    assert db_session.query(BacktestResult).count() == 1
+
 
 def test_bulk_backtest_runs_only_pending_buy_decisions(client, db_session, monkeypatch):
     first = _decision(db_session, ticker="AAPL")
     _decision(db_session, ticker="MSFT")
     _decision(db_session, ticker="TSLA", decision="NO_COMPRAMOS")
+    _decision(db_session, ticker="TEST_CONFIRM")
     db_session.add(BacktestResult(decision_id=first.id, alert_id=first.alert_id, ticker="AAPL", result="NO_RESULT", days_checked=10, reason="existing"))
     db_session.commit()
     _mock_download(monkeypatch, _price_data([111.0], [99.0], [110.0]))
@@ -162,6 +212,6 @@ def test_bulk_backtest_runs_only_pending_buy_decisions(client, db_session, monke
     payload = response.json()
     assert payload["status"] == "backtest_completed"
     assert payload["created"] == 1
-    assert payload["skipped"] == 1
+    assert payload["skipped"] == 2
     assert len(payload["results"]) == 1
     assert db_session.query(BacktestResult).count() == 2

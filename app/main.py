@@ -393,8 +393,11 @@ def backtests_history(db: Session = Depends(get_db)) -> list[BacktestResultRespo
 
 
 @app.get("/backtests/summary")
-def backtests_summary(db: Session = Depends(get_db)) -> dict:
-    return backtest_summary(db)
+def backtests_summary(
+    include_errors: bool = Query(default=False),
+    db: Session = Depends(get_db),
+) -> dict:
+    return backtest_summary(db, include_errors=include_errors)
 
 
 @app.post("/confirmations/pre-close/{alert_id}")
