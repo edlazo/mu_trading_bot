@@ -1,0 +1,141 @@
+version: "3"
+
+vars:
+  PYTHON: '{{.PYTHON | default ".venv/bin/python"}}'
+  PIP: '{{.PIP | default ".venv/bin/pip"}}'
+  UVICORN: '{{.UVICORN | default ".venv/bin/uvicorn"}}'
+  APP_MODULE: app.main:app
+  HOST: 127.0.0.1
+  PORT: 8000
+  WEBHOOK_SECRET: '{{.WEBHOOK_SECRET | default "change-me"}}'
+
+tasks:
+  default:
+    desc: Lista los comandos disponibles.
+    cmds:
+      - task --list
+
+  venv:
+    desc: Crea el entorno virtual local.
+    status:
+      - test -x .venv/bin/python
+    cmds:
+      - python3 -m venv .venv
+
+  install:
+    desc: Instala dependencias del proyecto.
+    deps:
+      - venv
+    cmds:
+      - "{{.PIP}} install -r requirements.txt"
+
+  setup:
+    desc: Prepara entorno local completo.
+    deps:
+      - install
+    cmds:
+      - test -f .env || cp .env.example .env
+
+  test:
+    desc: Ejecuta la suite de tests.
+    deps:
+      - install
+    cmds:
+      - "{{.PYTHON}} -m pytest -q"
+
+  test:verbose:
+    desc: Ejecuta tests con salida detallada.
+    deps:
+      - install
+    cmds:
+      - "{{.PYTHON}} -m pytest -vv"
+
+  run:
+    desc: Ejecuta la API local.
+    deps:
+      - install
+    cmds:
+      - "{{.UVICORN}} {{.APP_MODULE}} --host {{.HOST}} --port {{.PORT}}"
+
+  dev:
+    desc: Ejecuta la API local con autoreload.
+    deps:
+      - install
+    cmds:
+      - "{{.UVICORN}} {{.APP_MODULE}} --reload --host {{.HOST}} --port {{.PORT}}"
+
+  health:
+    desc: Prueba el health check local.
+    cmds:
+      - curl -s http://{{.HOST}}:{{.PORT}}/
+
+  webhook:example:
+    desc: Envia el JSON de ejemplo al webhook local.
+    cmds:
+      - |
+        curl -s -X POST http://{{.HOST}}:{{.PORT}}/webhooks/tradingview \
+          -H "Content-Type: application/json" \
+          -H "X-Webhook-Secret: {{.WEBHOOK_SECRET}}" \
+          -d '{
+            "ticker": "AAPL",
+            "market": "USA",
+            "timeframe": "1D",
+            "source": "mixed",
+            "reason": "Precio recupera zona tecnica y los indicadores acompanan parcialmente.",
+            "close": 195.2,
+            "sma30": 192.8,
+            "asl21": 191.4,
+            "ema150": 181.6,
+            "ema200": 178.9,
+            "rsi": 61.5,
+            "rsi_ma": 55.2,
+            "koncorde_azul": 8.2,
+            "koncorde_azul_prev": 6.5,
+            "koncorde_marron": 14.4,
+            "koncorde_marron_prev": 12.8,
+            "koncorde_media": 10.1,
+            "ppo": 1.25,
+            "ppo_signal": 1.1,
+            "ppo_hist": 0.15,
+            "ppo_hist_prev": 0.07,
+            "volume_ok": true,
+            "support": 188.4,
+            "resistance": 198.5,
+            "target": 205.0,
+            "stop_loss": 188.4,
+            "weekly_context": "alcista",
+            "monthly_context": "sano",
+            "fundamental_context": "neutral",
+            "notes": "Alerta preliminar para seguimiento."
+          }'
+
+  alerts:active:
+    desc: Lista alertas activas locales.
+    cmds:
+      - curl -s http://{{.HOST}}:{{.PORT}}/alerts/active
+
+  confirm:pre-close:
+    desc: Ejecuta la confirmacion pre-cierre manual.
+    cmds:
+      - curl -s -X POST http://{{.HOST}}:{{.PORT}}/confirmations/pre-close
+
+  clean:
+    desc: Limpia caches y bases SQLite locales.
+    cmds:
+      - find . -type d -name __pycache__ -prune -exec rm -rf {} +
+      - rm -rf .pytest_cache
+      - rm -f mu_trading_bot.db test_mu_trading_bot.db
+
+  deploy:check:
+    desc: Verifica que el proyecto este listo para desplegar.
+    deps:
+      - test
+    cmds:
+      - "{{.PYTHON}} -m compileall app"
+
+  deploy:local:
+    desc: Prepara y ejecuta la app en modo local de despliegue.
+    deps:
+      - deploy:check
+    cmds:
+      - "{{.UVICORN}} {{.APP_MODULE}} --host 0.0.0.0 --port {{.PORT}}"
