@@ -138,7 +138,7 @@ def run_backtest_for_decision(db: Session, decision_id: int, days: int = 10, for
         hit_target = daily_high >= decision.target
         hit_stop = daily_low <= decision.stop_loss
         if hit_target and hit_stop:
-            outcome = BacktestOutcome.ERROR
+            outcome = BacktestOutcome.AMBIGUOUS
             exit_price = None
             exit_date = _row_date(row)
             reason = "La misma vela toco target y stop; resultado ambiguo"
@@ -207,12 +207,16 @@ def backtest_summary(db: Session) -> dict:
     target_hit = sum(1 for result in results if result.result == BacktestOutcome.TARGET_HIT.value)
     stop_hit = sum(1 for result in results if result.result == BacktestOutcome.STOP_HIT.value)
     no_result = sum(1 for result in results if result.result == BacktestOutcome.NO_RESULT.value)
+    ambiguous = sum(1 for result in results if result.result == BacktestOutcome.AMBIGUOUS.value)
+    error = sum(1 for result in results if result.result == BacktestOutcome.ERROR.value)
     pnl_values = [result.pnl_percent for result in results if result.pnl_percent is not None]
     return {
         "total": total,
         "target_hit": target_hit,
         "stop_hit": stop_hit,
         "no_result": no_result,
+        "ambiguous": ambiguous,
+        "error": error,
         "win_rate": (target_hit / total * 100) if total else 0.0,
         "average_pnl_percent": (sum(pnl_values) / len(pnl_values)) if pnl_values else 0.0,
     }
