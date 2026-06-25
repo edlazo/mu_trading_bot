@@ -361,7 +361,7 @@ def _risk_reward_skip_result(ticker: str, signal: TradingViewSignal, debug: dict
             ticker,
             None,
             "technical_signal_invalid_rr",
-            "Hay se?al t?cnica, pero el R/R no alcanza el m?nimo operativo",
+            "Hay senal tecnica, pero el R/R no alcanza el minimo operativo",
             enriched_debug,
         )
 

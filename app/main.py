@@ -17,6 +17,7 @@ from app.models.decision import Decision
 from app.schemas.alert import AlertResponse, AlertStatus
 from app.schemas.backtest import BacktestResultResponse, BacktestRunResponse
 from app.schemas.dashboard import DashboardSummaryResponse
+from app.schemas.maintenance import MaintenanceCleanupResponse, MaintenanceTestDataSummary
 from app.schemas.scanner import ScannerRequest, ScannerResponse
 from app.schemas.tradingview import TradingViewSignal
 from app.schemas.watchlist import WatchlistTickerCreate, WatchlistTickerResponse, WatchlistTickerUpdate
@@ -32,6 +33,7 @@ from app.services.alert_service import (
 from app.services.confirmation_service import confirm_alert_with_signal, run_pre_close_confirmation
 from app.services.backtest_service import backtest_summary, list_backtests, run_backtest_for_decision, run_backtests_for_pending_buy_decisions
 from app.services.dashboard_service import get_dashboard_summary
+from app.services.maintenance_service import cleanup_test_data, get_test_data_summary
 from app.services.decision_service import decision_summary, get_decision, list_decisions, list_decisions_by_ticker
 from app.services.scanner_service import scan_watchlist
 import app.services.scheduler_service as scheduler_service
@@ -96,6 +98,7 @@ OPENAPI_TAGS = [
     {"name": "Decisions", "description": "Historial y resumen de decisiones del bot."},
     {"name": "Backtesting", "description": "Ejecucion y consulta de resultados de backtesting."},
     {"name": "Dashboard", "description": "Resumen centralizado del estado general del bot."},
+    {"name": "Maintenance", "description": "Herramientas de mantenimiento y limpieza de datos de prueba."},
 ]
 
 
@@ -232,6 +235,18 @@ async def run_watchlist_scanner(
         db=db,
     )
 
+
+@app.get("/maintenance/test-data/summary", response_model=MaintenanceTestDataSummary, tags=["Maintenance"], summary="Get test data summary")
+def maintenance_test_data_summary(db: Session = Depends(get_db)) -> MaintenanceTestDataSummary:
+    return get_test_data_summary(db)
+
+
+@app.post("/maintenance/cleanup-test-data", response_model=MaintenanceCleanupResponse, tags=["Maintenance"], summary="Cleanup test data")
+def maintenance_cleanup_test_data(
+    dry_run: bool = Query(default=True),
+    db: Session = Depends(get_db),
+) -> MaintenanceCleanupResponse:
+    return cleanup_test_data(db, dry_run=dry_run)
 
 @app.get("/dashboard/summary", response_model=DashboardSummaryResponse, tags=["Dashboard"], summary="Get dashboard summary")
 def dashboard_summary(db: Session = Depends(get_db)) -> DashboardSummaryResponse:

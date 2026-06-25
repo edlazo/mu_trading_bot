@@ -163,7 +163,7 @@ async def test_scan_watchlist_skips_when_risk_reward_is_below_one(db_session, mo
 
     assert result.created_alerts == []
     assert result.skipped[0].status == "technical_signal_invalid_rr"
-    assert result.skipped[0].reason == "Hay se?al t?cnica, pero el R/R no alcanza el m?nimo operativo"
+    assert result.skipped[0].reason == "Hay senal tecnica, pero el R/R no alcanza el minimo operativo"
 
 
 
@@ -199,7 +199,7 @@ async def test_scan_watchlist_skips_technical_signal_when_risk_reward_below_one_
 
     assert result.created_alerts == []
     assert result.skipped[0].status == "technical_signal_invalid_rr"
-    assert result.skipped[0].reason == "Hay se?al t?cnica, pero el R/R no alcanza el m?nimo operativo"
+    assert result.skipped[0].reason == "Hay senal tecnica, pero el R/R no alcanza el minimo operativo"
     assert result.skipped[0].debug["risk_reward"] == 0.5
     assert result.skipped[0].debug["conditions"] == {"rsi_in_buy_zone": True}
 
