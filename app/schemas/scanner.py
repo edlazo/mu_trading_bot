@@ -14,5 +14,10 @@ class ScannerResponse(BaseModel):
     created_watchlist: int | None = None
     created_tickers: list[str]
     skipped: list[dict]
+    total_enabled: int | None = None
+    limit: int | None = None
+    offset: int | None = None
+    next_offset: int | None = None
+    has_more: bool | None = None
     created: list[dict] | None = None
     message: str | None = None

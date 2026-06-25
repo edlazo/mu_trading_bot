@@ -129,3 +129,72 @@ def test_seed_default_watchlist(client):
     assert payload["status"] == "watchlist_seeded"
     assert payload["created"] >= 17
     assert "AAPL" in payload["tickers"]
+
+
+def test_get_sp500_tickers_endpoint_returns_list(client, monkeypatch):
+    monkeypatch.setattr("app.routes.watchlist_routes.fetch_sp500_tickers", lambda: ["AAPL", "BRK-B", "MSFT"])
+
+    response = client.get("/watchlist/sp500")
+
+    assert response.status_code == 200
+    assert response.json() == {"source": "sp500", "count": 3, "tickers": ["AAPL", "BRK-B", "MSFT"]}
+
+
+def test_import_sp500_endpoint_creates_tickers(client, monkeypatch):
+    monkeypatch.setattr("app.services.sp500_service.fetch_sp500_tickers", lambda: ["AAPL", "MSFT"])
+
+    response = client.post("/watchlist/import-sp500")
+
+    assert response.status_code == 200
+    assert response.json()["created"] == 2
+    assert [item["ticker"] for item in client.get("/watchlist").json()] == ["AAPL", "MSFT"]
+
+
+def test_import_sp500_endpoint_does_not_duplicate_existing_tickers(client, monkeypatch):
+    client.post("/watchlist", json={"ticker": "AAPL", "market": "USA"})
+    monkeypatch.setattr("app.services.sp500_service.fetch_sp500_tickers", lambda: ["AAPL", "MSFT"])
+
+    response = client.post("/watchlist/import-sp500")
+
+    assert response.status_code == 200
+    assert response.json()["created"] == 1
+    assert response.json()["updated"] == 1
+    assert len(client.get("/watchlist").json()) == 2
+
+
+def test_import_sp500_endpoint_reactivates_disabled_ticker(client, monkeypatch):
+    client.post("/watchlist", json={"ticker": "AAPL", "market": "USA"})
+    client.patch("/watchlist/AAPL", json={"enabled": False})
+    monkeypatch.setattr("app.services.sp500_service.fetch_sp500_tickers", lambda: ["AAPL"])
+
+    response = client.post("/watchlist/import-sp500?enabled=true")
+
+    assert response.status_code == 200
+    assert response.json()["updated"] == 1
+    assert client.get("/watchlist").json()[0]["enabled"] is True
+
+
+def test_sync_sp500_endpoint_keeps_removed_when_disable_removed_false(client, monkeypatch):
+    client.post("/watchlist", json={"ticker": "REMOVED", "market": "USA", "notes": "S&P 500"})
+    monkeypatch.setattr("app.services.sp500_service.fetch_sp500_tickers", lambda: ["AAPL"])
+
+    response = client.post("/watchlist/sync-sp500?disable_removed=false")
+
+    assert response.status_code == 200
+    assert response.json()["disabled_removed"] == 0
+    removed = [item for item in client.get("/watchlist").json() if item["ticker"] == "REMOVED"][0]
+    assert removed["enabled"] is True
+
+
+def test_sync_sp500_endpoint_disables_removed_when_requested(client, monkeypatch):
+    client.post("/watchlist", json={"ticker": "REMOVED", "market": "USA", "notes": "S&P 500"})
+    client.post("/watchlist", json={"ticker": "CUSTOM", "market": "USA", "notes": "manual"})
+    monkeypatch.setattr("app.services.sp500_service.fetch_sp500_tickers", lambda: ["AAPL"])
+
+    response = client.post("/watchlist/sync-sp500?disable_removed=true")
+
+    assert response.status_code == 200
+    assert response.json()["disabled_removed"] == 1
+    by_ticker = {item["ticker"]: item for item in client.get("/watchlist").json()}
+    assert by_ticker["REMOVED"]["enabled"] is False
+    assert by_ticker["CUSTOM"]["enabled"] is True

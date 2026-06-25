@@ -2,7 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
+from app.schemas.sp500 import SP500ImportResponse, SP500SyncResponse, SP500TickerListResponse
 from app.schemas.watchlist import WatchlistTickerCreate, WatchlistTickerResponse, WatchlistTickerUpdate
+from app.services.sp500_service import fetch_sp500_tickers, import_sp500_to_watchlist, sync_sp500_watchlist
 from app.services.watchlist_service import (
     create_watchlist_ticker,
     disable_watchlist_ticker,
@@ -39,6 +41,35 @@ def seed_watchlist_defaults(db: Session = Depends(get_db)) -> dict:
         "created": len(created),
         "tickers": [item.ticker for item in created],
     }
+
+
+
+@router.get("/sp500", response_model=SP500TickerListResponse, summary="Get S&P 500 tickers")
+def get_sp500_tickers() -> SP500TickerListResponse:
+    tickers = fetch_sp500_tickers()
+    return SP500TickerListResponse(source="sp500", count=len(tickers), tickers=tickers)
+
+
+@router.post("/import-sp500", response_model=SP500ImportResponse, summary="Import S&P 500 to watchlist")
+def import_sp500_watchlist(
+    enabled: bool = True,
+    notes: str = "S&P 500",
+    db: Session = Depends(get_db),
+) -> SP500ImportResponse:
+    return SP500ImportResponse.model_validate(
+        import_sp500_to_watchlist(db, enabled=enabled, notes=notes)
+    )
+
+
+@router.post("/sync-sp500", response_model=SP500SyncResponse, summary="Sync S&P 500 watchlist")
+def sync_sp500_watchlist_endpoint(
+    enabled: bool = True,
+    disable_removed: bool = False,
+    db: Session = Depends(get_db),
+) -> SP500SyncResponse:
+    return SP500SyncResponse.model_validate(
+        sync_sp500_watchlist(db, enabled=enabled, disable_removed=disable_removed)
+    )
 
 
 @router.patch("/{ticker}", response_model=WatchlistTickerResponse, summary="Update watchlist ticker")

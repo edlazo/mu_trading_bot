@@ -247,3 +247,73 @@ def _scanner_dataframe_with_high_low_volume() -> pd.DataFrame:
     return pd.DataFrame({"Close": close, "High": high, "Low": low, "Volume": volume})
 
 
+
+
+def test_run_watchlist_without_limit_scans_all_enabled_tickers(client, monkeypatch):
+    client.post("/watchlist", json={"ticker": "MSFT", "market": "USA"})
+    client.post("/watchlist", json={"ticker": "AAPL", "market": "USA"})
+    client.post("/watchlist", json={"ticker": "NVDA", "market": "USA"})
+    captured = {}
+
+    async def fake_scan_watchlist(db, tickers, force_alert=False, **kwargs):
+        captured["tickers"] = tickers
+        return ScannerWatchlistResult(scanned=len(tickers), created_alerts=[], skipped=[])
+
+    monkeypatch.setattr("app.routes.scanner_routes.scan_watchlist", fake_scan_watchlist)
+
+    response = client.post("/scanner/run-watchlist")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert captured["tickers"] == ["AAPL", "MSFT", "NVDA"]
+    assert payload["scanned"] == 3
+    assert payload["total_enabled"] == 3
+    assert payload["offset"] == 0
+    assert payload["has_more"] is False
+    assert payload["limit"] is None
+    assert payload["next_offset"] is None
+
+
+def test_run_watchlist_with_limit_and_offset_scans_stable_batch(client, monkeypatch):
+    for ticker in ["TSLA", "AAPL", "NVDA", "MSFT"]:
+        client.post("/watchlist", json={"ticker": ticker, "market": "USA"})
+    captured = {}
+
+    async def fake_scan_watchlist(db, tickers, force_alert=False, **kwargs):
+        captured["tickers"] = tickers
+        return ScannerWatchlistResult(scanned=len(tickers), created_alerts=[], skipped=[])
+
+    monkeypatch.setattr("app.routes.scanner_routes.scan_watchlist", fake_scan_watchlist)
+
+    response = client.post("/scanner/run-watchlist?limit=2&offset=1")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert captured["tickers"] == ["MSFT", "NVDA"]
+    assert payload["scanned"] == 2
+    assert payload["total_enabled"] == 4
+    assert payload["limit"] == 2
+    assert payload["offset"] == 1
+    assert payload["next_offset"] == 3
+    assert payload["has_more"] is True
+
+
+def test_run_watchlist_last_batch_has_no_next_offset(client, monkeypatch):
+    for ticker in ["AAPL", "MSFT", "NVDA"]:
+        client.post("/watchlist", json={"ticker": ticker, "market": "USA"})
+
+    async def fake_scan_watchlist(db, tickers, force_alert=False, **kwargs):
+        return ScannerWatchlistResult(scanned=len(tickers), created_alerts=[], skipped=[])
+
+    monkeypatch.setattr("app.routes.scanner_routes.scan_watchlist", fake_scan_watchlist)
+
+    response = client.post("/scanner/run-watchlist?limit=2&offset=2")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["scanned"] == 1
+    assert payload["total_enabled"] == 3
+    assert payload["limit"] == 2
+    assert payload["offset"] == 2
+    assert payload["has_more"] is False
+    assert payload["next_offset"] is None

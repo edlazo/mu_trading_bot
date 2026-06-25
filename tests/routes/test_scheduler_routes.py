@@ -16,6 +16,7 @@ NEW_YORK = ZoneInfo("America/New_York")
 def reset_scheduler_state():
     scheduler_service.is_running = False
     scheduler_service.is_scan_running = False
+    scheduler_service.scanner_batch_offset = 0
     scheduler_service.last_run_at = None
     scheduler_service.last_result = None
     scheduler_service.last_confirmation_date = None
@@ -109,6 +110,7 @@ def test_scheduler_run_once_skips_when_scan_is_running(client):
     assert response.status_code == 200
     assert response.json() == {"status": "skipped", "reason": "scan_already_running"}
     scheduler_service.is_scan_running = False
+scheduler_service.scanner_batch_offset = 0
 
 
 
@@ -146,3 +148,32 @@ def test_market_closed_run_once_does_not_stop_scheduler_loop(client, monkeypatch
     assert response.json()["status"] == "market_closed"
     assert client.get("/scheduler/status").json()["is_running"] is True
     scheduler_service.is_running = False
+
+def test_scheduler_batch_advances_offset_and_resets(client, monkeypatch):
+    reset_scheduler_state()
+    import asyncio
+
+    for ticker in ["TSLA", "AAPL", "NVDA", "MSFT"]:
+        client.post("/watchlist", json={"ticker": ticker, "market": "USA"})
+
+    scanned_batches = []
+
+    async def fake_scan_watchlist(db, tickers, **kwargs):
+        scanned_batches.append(tickers)
+        return ScannerWatchlistResult(scanned=len(tickers), created_alerts=[], skipped=[])
+
+    monkeypatch.setattr("app.services.scheduler_service.is_market_open", lambda current_datetime: True)
+    monkeypatch.setattr("app.services.scheduler_service.get_market_session_status", lambda current_datetime: "open")
+    monkeypatch.setattr("app.services.scheduler_service.scan_watchlist", fake_scan_watchlist)
+
+    first = asyncio.run(run_scheduled_watchlist_scan(__import__("app.database.session", fromlist=["SessionLocal"]).SessionLocal, scanner_batch_size=2))
+    second = asyncio.run(run_scheduled_watchlist_scan(__import__("app.database.session", fromlist=["SessionLocal"]).SessionLocal, scanner_batch_size=2))
+
+    assert scanned_batches == [["AAPL", "MSFT"], ["NVDA", "TSLA"]]
+    assert first["offset"] == 0
+    assert first["next_offset"] == 2
+    assert first["has_more"] is True
+    assert second["offset"] == 2
+    assert second["has_more"] is False
+    assert second["next_offset"] is None
+    assert scheduler_service.scanner_batch_offset == 0

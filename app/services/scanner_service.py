@@ -128,7 +128,7 @@ def _build_signal(
 def scan_ticker(ticker: str, force_alert: bool = False) -> ScannerTickerResult:
     normalized_ticker = ticker.strip().upper()
     if not normalized_ticker:
-        return ScannerTickerResult(ticker=ticker, signal=None, status="error", reason="Ticker vacío")
+        return ScannerTickerResult(ticker=ticker, signal=None, status="error", reason="Ticker vacio")
 
     logger.info("Scanner: escaneando ticker=%s", normalized_ticker)
     try:
@@ -352,7 +352,7 @@ def _risk_reward_skip_result(ticker: str, signal: TradingViewSignal, debug: dict
             ticker,
             None,
             "invalid_risk_reward",
-            "R/R inv?lido: target, entrada o stop no permiten calcular una oportunidad operativa",
+            "R/R invalido: target, entrada o stop no permiten calcular una oportunidad operativa",
             enriched_debug,
         )
 
