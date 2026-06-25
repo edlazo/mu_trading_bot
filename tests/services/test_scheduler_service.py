@@ -104,6 +104,7 @@ NEW_YORK = ZoneInfo("America/New_York")
 
 
 def reset_scheduler_state():
+    scheduler_service.is_running = False
     scheduler_service.is_scan_running = False
     scheduler_service.last_run_at = None
     scheduler_service.last_result = None

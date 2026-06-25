@@ -2,8 +2,11 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import pytest
+from fastapi.testclient import TestClient
 
 import app.services.scheduler_service as scheduler_service
+from app.config import get_settings
+from app.main import app
 from app.services.scanner_service import ScannerWatchlistResult
 from app.services.scheduler_service import run_scheduled_watchlist_scan
 
@@ -11,6 +14,7 @@ NEW_YORK = ZoneInfo("America/New_York")
 
 
 def reset_scheduler_state():
+    scheduler_service.is_running = False
     scheduler_service.is_scan_running = False
     scheduler_service.last_run_at = None
     scheduler_service.last_result = None
@@ -107,3 +111,38 @@ def test_scheduler_run_once_skips_when_scan_is_running(client):
     scheduler_service.is_scan_running = False
 
 
+
+
+def test_scheduler_starts_on_lifespan_when_enabled(monkeypatch):
+    reset_scheduler_state()
+    monkeypatch.setenv("ENABLE_SCHEDULER", "true")
+    monkeypatch.setenv("SCHEDULER_INTERVAL_SECONDS", "1200")
+    get_settings.cache_clear()
+
+    try:
+        with TestClient(app) as test_client:
+            response = test_client.get("/scheduler/status")
+            assert response.status_code == 200
+            payload = response.json()
+            assert payload["enabled"] is True
+            assert payload["interval_seconds"] == 1200
+            assert payload["is_running"] is True
+    finally:
+        get_settings.cache_clear()
+        scheduler_service.is_running = False
+
+
+def test_market_closed_run_once_does_not_stop_scheduler_loop(client, monkeypatch):
+    reset_scheduler_state()
+    scheduler_service.is_running = True
+    client.post("/watchlist", json={"ticker": "AAPL", "market": "USA"})
+
+    monkeypatch.setattr("app.services.scheduler_service.is_market_open", lambda current_datetime: False)
+    monkeypatch.setattr("app.services.scheduler_service.get_market_session_status", lambda current_datetime: "post_market")
+
+    response = client.post("/scheduler/run-once")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "market_closed"
+    assert client.get("/scheduler/status").json()["is_running"] is True
+    scheduler_service.is_running = False

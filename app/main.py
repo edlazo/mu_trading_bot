@@ -34,6 +34,7 @@ from app.services.backtest_service import backtest_summary, list_backtests, run_
 from app.services.dashboard_service import get_dashboard_summary
 from app.services.decision_service import decision_summary, get_decision, list_decisions, list_decisions_by_ticker
 from app.services.scanner_service import scan_watchlist
+import app.services.scheduler_service as scheduler_service
 from app.services.scheduler_service import get_scheduler_status, run_scheduled_watchlist_scan, scheduler_loop
 from app.services.watchlist_service import (
     create_watchlist_ticker,
@@ -57,10 +58,17 @@ async def lifespan(app: FastAPI):
     app.state.scheduler_enabled = settings.enable_scheduler
 
     if settings.enable_scheduler:
+        print("Scheduler enabled")
+        scheduler_service.is_running = True
         scheduler_task = asyncio.create_task(
             scheduler_loop(SessionLocal, settings.scheduler_interval_seconds)
         )
         app.state.scheduler_task = scheduler_task
+    else:
+        print("Scheduler disabled")
+        scheduler_service.is_running = False
+        if hasattr(app.state, "scheduler_task"):
+            delattr(app.state, "scheduler_task")
 
     try:
         yield
@@ -71,6 +79,10 @@ async def lifespan(app: FastAPI):
                 await scheduler_task
             except asyncio.CancelledError:
                 pass
+            finally:
+                scheduler_service.is_running = False
+                if hasattr(app.state, "scheduler_task"):
+                    delattr(app.state, "scheduler_task")
 
 
 OPENAPI_TAGS = [

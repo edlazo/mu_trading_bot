@@ -1,3 +1,9 @@
+from fastapi.testclient import TestClient
+
+import app.services.scheduler_service as scheduler_service
+from app.config import get_settings
+from app.main import app
+
 def test_dashboard_summary_returns_200(client):
     response = client.get("/dashboard/summary")
 
@@ -51,3 +57,19 @@ def test_dashboard_endpoint_appears_under_dashboard_tag(client):
     assert operation["tags"] == ["Dashboard"]
     assert operation["summary"] == "Get dashboard summary"
     assert any(tag["name"] == "Dashboard" for tag in schema["tags"])
+
+def test_dashboard_reflects_running_scheduler_when_enabled(monkeypatch):
+    scheduler_service.is_running = False
+    monkeypatch.setenv("ENABLE_SCHEDULER", "true")
+    monkeypatch.setenv("SCHEDULER_INTERVAL_SECONDS", "1200")
+    get_settings.cache_clear()
+
+    try:
+        with TestClient(app) as test_client:
+            scheduler = test_client.get("/dashboard/summary").json()["scheduler"]
+            assert scheduler["enabled"] is True
+            assert scheduler["interval_seconds"] == 1200
+            assert scheduler["is_running"] is True
+    finally:
+        get_settings.cache_clear()
+        scheduler_service.is_running = False
