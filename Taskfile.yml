@@ -41,7 +41,7 @@ tasks:
     deps:
       - install
     cmds:
-      - "{{.PYTHON}} -m pytest -q"
+      - "{{.PYTHON}} -m pytest"
 
   test:verbose:
     desc: Ejecuta tests con salida detallada.

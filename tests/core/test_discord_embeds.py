@@ -16,7 +16,7 @@ from app.integrations.discord import send_discord_message
 from app.integrations.discord_payloads import build_discord_embed_payload, risk_color
 from app.schemas.alert import FinalDecision, RiskLevel
 from app.schemas.tradingview import TradingViewSignal
-from tests.test_webhook import EXAMPLE_SIGNAL
+from tests.routes.test_webhook_routes import EXAMPLE_SIGNAL
 
 
 def _signal(**overrides) -> TradingViewSignal:

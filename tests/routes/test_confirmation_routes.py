@@ -1,7 +1,7 @@
 from app.models.alert import Alert
 from app.models.decision import Decision
 from app.schemas.alert import AlertStatus, FinalDecision
-from tests.test_webhook import EXAMPLE_SIGNAL
+from tests.routes.test_webhook_routes import EXAMPLE_SIGNAL
 
 
 def _create_alert(client, signal=None) -> int:
@@ -156,3 +156,20 @@ def test_bulk_confirmation_does_not_confirm_same_alert_twice(client):
     assert second_response.json()["confirmed"] == 0
     assert second_response.json()["rejected"] == 0
     assert second_response.json()["decisions"] == []
+
+
+def test_bulk_pre_close_confirmation_still_works_with_updated_data_flow(client):
+    create_response = client.post(
+        "/webhooks/tradingview",
+        json={**EXAMPLE_SIGNAL, "target": 212.0},
+        headers={"X-Webhook-Secret": "test-secret"},
+    )
+    assert create_response.status_code == 200
+
+    response = client.post("/confirmations/pre-close")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "pre_close_confirmation_completed"
+    assert len(body["decisions"]) == 1
+    assert body["decisions"][0]["ticker"] == "AAPL"
