@@ -1,191 +1,158 @@
 # Mu Trading Bot
 
-Mu Trading Bot es un asistente de analisis de oportunidades de trading. Escanea activos, detecta posibles setups, envia alertas informativas a Discord y confirma decisiones pre-cierre. No ejecuta compras ni ventas automaticamente.
+## Descripcion
 
-## Advertencia importante
+Mu Trading Bot es una API backend para escanear oportunidades tecnicas de trading, crear alertas, confirmar decisiones pre-cierre y evaluar resultados mediante backtesting basico.
 
-- Este proyecto es educativo y experimental.
-- No es asesoramiento financiero.
-- No ejecuta compras ni ventas automaticamente.
-- Las decisiones finales deben ser revisadas manualmente por el usuario.
-- Antes de operar, revisar grafico, precio real, liquidez, CEDEAR si aplica, comisiones y riesgo propio.
+El sistema esta pensado como herramienta educativa, de soporte de decision y portfolio tecnico. No compra ni vende automaticamente, no opera cuentas reales y no debe interpretarse como asesoramiento financiero. La decision final de ejecutar una operacion siempre queda en manos del usuario.
 
-## Features actuales
+## Features
 
-- Backend FastAPI con documentacion interactiva en `/docs`.
-- Scanner automatico con `yfinance`.
-- Indicadores tecnicos: SMA30, ASL21, EMA150, EMA200, RSI y PPO.
-- Watchlist persistente en base de datos.
-- Alertas iniciales a Discord.
+- Watchlist configurable y persistente.
+- Scanner tecnico con filtros operativos.
+- Validacion de relacion riesgo/beneficio.
+- Alertas `EN_OBSERVACION` durante mercado abierto.
+- Alertas `WATCHLIST` fuera de horario cuando se permite `allow_after_hours=true`.
+- Confirmaciones pre-cierre con decision `COMPRAMOS` / `NO_COMPRAMOS`.
+- Integracion con Discord Webhooks.
 - Webhook compatible con TradingView y Postman.
-- Filtro de mercado abierto/cerrado para evitar alertas operativas fuera de horario.
-- Estado `WATCHLIST` para oportunidades detectadas fuera de horario.
-- Archivado de alertas.
-- Confirmacion pre-cierre manual y automatizable.
-- Scheduler opcional para scanner y confirmacion pre-cierre.
+- Scheduler automatico opcional.
+- Backtesting basico para decisiones `COMPRAMOS`.
+- Dashboard summary centralizado.
+- Maintenance tools para datos de prueba.
+- Swagger organizado por modulos/tags.
 - Tests automatizados con pytest.
+- Rutas organizadas con `APIRouter` en `app/routes/`.
 
-## Stack tecnico
+## Stack
 
-- Python 3.11+
+- Python
 - FastAPI
-- Pydantic / Pydantic Settings
 - SQLAlchemy
-- SQLite para desarrollo
+- SQLite
+- Pydantic / Pydantic Settings
 - yfinance
 - pandas
 - numpy
-- HTTPX
+- httpx
 - pytest
 - Discord Webhooks
 
-## Estructura del proyecto
+## Arquitectura
 
 ```text
-app/
-  core/            Logica de scoring, riesgo, decision, indicadores y horarios de mercado
-  database/        Engine, sesiones y base SQLAlchemy
-  integrations/    Discord y validacion TradingView
-  models/          Modelos SQLAlchemy
-  schemas/         Schemas Pydantic
-  services/        Servicios de alertas, scanner, scheduler, watchlist y confirmaciones
-  main.py          App FastAPI y endpoints
-docs/              Documentacion adicional
-examples/          Payloads de ejemplo
-tests/             Suite de tests
-.env.example       Variables de entorno de ejemplo
-requirements.txt   Dependencias Python
-Taskfile.yml       Comandos repetitivos
+mu_trading_bot/
+  main.py                  Entrypoint raiz: from app.main import app
+  app/
+    __init__.py
+    main.py                Configuracion FastAPI, lifespan, routers y OpenAPI tags
+    routes/                Endpoints FastAPI por modulo
+    core/                  Indicadores, riesgo, decision y horarios de mercado
+    database/              Engine, sesiones y base SQLAlchemy
+    integrations/          Discord y validacion TradingView
+    models/                Modelos SQLAlchemy
+    schemas/               Schemas Pydantic
+    services/              Logica de aplicacion
+  tests/
+    routes/                Tests de endpoints
+    services/              Tests de servicios
+    core/                  Tests de logica pura
+    conftest.py
+  docs/                    Documentacion adicional
+  examples/                Payloads de ejemplo
 ```
 
-## Requisitos
-
-- Python 3.11+.
-- Entorno virtual Python.
-- Cuenta o servidor de Discord.
-- Webhook de Discord.
-- Opcional: ngrok para exponer FastAPI localmente.
-- Opcional: TradingView para enviar webhooks reales.
-- Opcional: Taskfile para usar comandos `task`.
-
-## Instalacion local
-
-Desde WSL/Linux:
-
-```bash
-cd /home/elias/Projects/mu_trading_bot
-
-python3 -m venv .venv
-source .venv/bin/activate
-
-pip install -r requirements.txt
-```
-
-Si usas Taskfile:
-
-```bash
-task setup
-```
+`main.py` raiz permite correr la API como `main:app`, mientras que `app.main:app` sigue funcionando para compatibilidad.
 
 ## Variables de entorno
 
-Crear un archivo `.env` en la raiz del proyecto. Puedes partir desde `.env.example`:
+Copiar `.env.example` a `.env` para desarrollo local:
 
 ```bash
 cp .env.example .env
 ```
 
-Ejemplo:
+Variables disponibles:
 
 ```env
 APP_NAME=Mu Trading Bot
 ENVIRONMENT=local
 DATABASE_URL=sqlite:///./mu_trading_bot.db
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
-TRADINGVIEW_WEBHOOK_SECRET=test-secret
+DISCORD_WEBHOOK_URL=
+TRADINGVIEW_WEBHOOK_SECRET=change-me
 ENABLE_SCHEDULER=false
-SCHEDULER_INTERVAL_SECONDS=300
+SCHEDULER_INTERVAL_SECONDS=1200
 ```
 
 Notas:
 
-- `DISCORD_WEBHOOK_URL` es privado. No debe subirse a Git.
-- `TRADINGVIEW_WEBHOOK_SECRET` valida requests externas al webhook.
-- Para TradingView puede usarse query param: `?secret=test-secret`.
-- `ENABLE_SCHEDULER` controla si el scheduler arranca junto con FastAPI.
-- Si cambias `.env`, reinicia `uvicorn`.
+- `.env` no se sube al repo.
+- `DISCORD_WEBHOOK_URL` es privado.
+- `TRADINGVIEW_WEBHOOK_SECRET` protege el webhook de TradingView/Postman.
+- `ENABLE_SCHEDULER=true` activa el loop automatico al iniciar FastAPI.
+- `SCHEDULER_INTERVAL_SECONDS=1200` equivale a 20 minutos.
 
-## Como correr el proyecto
+## Instalacion local
 
 ```bash
+python -m venv .venv
 source .venv/bin/activate
-uvicorn app.main:app --reload
+pip install -r requirements.txt
+cp .env.example .env
 ```
 
-Luego abrir:
+## Ejecutar API
 
-```text
-http://127.0.0.1:8000/docs
-```
-
-Con Taskfile:
+Comando recomendado:
 
 ```bash
-task dev
+.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-## Como correr tests
+Comando compatible:
 
 ```bash
-source .venv/bin/activate
-pytest
+.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Con Taskfile:
+URLs:
+
+- API: http://127.0.0.1:8000
+- Swagger: http://127.0.0.1:8000/docs
+
+## Ejecutar tests
 
 ```bash
 task test
 ```
 
-## Flujo principal del bot
+Alternativa:
 
-1. Se carga una watchlist persistente.
-2. El scanner analiza tickers usando datos diarios de yfinance.
-3. Si el mercado esta abierto, puede crear alertas `EN_OBSERVACION`.
-4. Si el mercado esta cerrado, el scanner operativo bloquea alertas; con `allow_after_hours=true` puede crear `WATCHLIST`.
-5. Las alertas se envian a Discord.
-6. Cerca del cierre, el bot confirma alertas activas:
-   - `COMPRAMOS`
-   - `NO_COMPRAMOS`
-7. La alerta deja de estar activa y queda guardada para historial.
-8. Las alertas de prueba o watchlist pueden archivarse sin borrado fisico.
+```bash
+python -m pytest
+```
+
+## Flujo principal
+
+1. Cargar o sembrar la watchlist.
+2. Ejecutar el scanner manual o automaticamente.
+3. Si el mercado esta cerrado y `allow_after_hours=true`, el bot puede crear `WATCHLIST` solo si hay R/R valido.
+4. Si el mercado esta abierto, el scanner puede crear alertas `EN_OBSERVACION`.
+5. En pre-cierre, el bot confirma alertas activas.
+6. La confirmacion crea decisiones `COMPRAMOS` / `NO_COMPRAMOS`.
+7. El backtesting evalua decisiones `COMPRAMOS` contra precios posteriores.
+8. El dashboard resume el estado general.
+9. Maintenance permite revisar y limpiar datos de prueba `TEST_`.
 
 ## Endpoints principales
 
-### Health
+### System
 
 - `GET /`
 
-### Discord
+### Dashboard
 
-- `POST /webhooks/test-discord`
-
-### TradingView / Postman
-
-- `POST /webhooks/tradingview`
-- `POST /webhooks/tradingview?secret=test-secret`
-
-El endpoint acepta el secreto por header:
-
-```text
-X-Webhook-Secret: test-secret
-```
-
-O por query param, util para TradingView:
-
-```text
-/webhooks/tradingview?secret=test-secret
-```
+- `GET /dashboard/summary`
 
 ### Watchlist
 
@@ -198,10 +165,7 @@ O por query param, util para TradingView:
 ### Scanner
 
 - `POST /scanner/run`
-- `POST /scanner/run?allow_after_hours=true`
-- `POST /scanner/run?force_alert=true`
 - `POST /scanner/run-watchlist`
-- `POST /scanner/run-watchlist?allow_after_hours=true`
 
 ### Alerts
 
@@ -217,219 +181,133 @@ O por query param, util para TradingView:
 - `POST /confirmations/pre-close`
 - `POST /confirmations/pre-close/{alert_id}`
 
+### Decisions
+
+- `GET /decisions`
+- `GET /decisions/summary`
+- `GET /decisions/{decision_id}`
+- `GET /decisions/by-ticker/{ticker}`
+
+### Backtesting
+
+- `GET /backtests`
+- `GET /backtests/summary`
+- `POST /backtests/run`
+- `POST /backtests/decisions/{decision_id}`
+
 ### Scheduler
 
 - `GET /scheduler/status`
 - `POST /scheduler/run-once`
 
-## Ejemplos de uso con Postman
+### Maintenance
 
-### A. Cargar watchlist inicial
+- `GET /maintenance/test-data/summary`
+- `POST /maintenance/cleanup-test-data`
 
-```text
-POST http://127.0.0.1:8000/watchlist/seed-defaults
+### Webhooks
+
+- `POST /webhooks/tradingview`
+- `POST /webhooks/test-discord`
+
+## Ejemplos de uso
+
+### 1. Seed watchlist
+
+```bash
+curl -X POST http://127.0.0.1:8000/watchlist/seed-defaults
 ```
 
-### B. Ver watchlist
+### 2. Run scanner watchlist fuera de horario
 
-```text
-GET http://127.0.0.1:8000/watchlist
+```bash
+curl -X POST "http://127.0.0.1:8000/scanner/run-watchlist?allow_after_hours=true&debug=true"
 ```
 
-### C. Ejecutar scanner manual
+### 3. Get active alerts
 
-```text
-POST http://127.0.0.1:8000/scanner/run
-Content-Type: application/json
+```bash
+curl http://127.0.0.1:8000/alerts/active
 ```
 
-Body:
+### 4. Pre-close confirmation
 
-```json
-{
-  "tickers": ["AAPL", "MSFT", "NVDA"]
-}
+```bash
+curl -X POST http://127.0.0.1:8000/confirmations/pre-close
 ```
 
-### D. Ejecutar scanner de watchlist
+### 5. Run backtesting
 
-```text
-POST http://127.0.0.1:8000/scanner/run-watchlist
+```bash
+curl -X POST "http://127.0.0.1:8000/backtests/run?days=10"
 ```
 
-### E. Ejecutar scanner fuera de horario como watchlist
+### 6. Get dashboard summary
 
-```text
-POST http://127.0.0.1:8000/scanner/run-watchlist?allow_after_hours=true
+```bash
+curl http://127.0.0.1:8000/dashboard/summary
 ```
 
-### F. Confirmacion pre-cierre manual
+### 7. Maintenance dry run
 
-```text
-POST http://127.0.0.1:8000/confirmations/pre-close
+```bash
+curl -X POST "http://127.0.0.1:8000/maintenance/cleanup-test-data?dry_run=true"
 ```
 
-## Ejemplo de webhook manual
+Mas ejemplos en [docs/API_EXAMPLES.md](docs/API_EXAMPLES.md).
 
-Endpoint:
+## Estados y decisiones
 
-```text
-POST http://127.0.0.1:8000/webhooks/tradingview
-```
+Alert status principales:
 
-Headers:
+- `EN_OBSERVACION`: alerta operativa activa pendiente de confirmacion.
+- `WATCHLIST`: oportunidad fuera de horario, no operativa.
+- `ARCHIVED`: alerta archivada.
+- `COMPRAMOS`: alerta confirmada positivamente.
+- `NO_COMPRAMOS`: alerta rechazada.
 
-```text
-Content-Type: application/json
-X-Webhook-Secret: test-secret
-```
+Decision:
 
-Body:
+- `COMPRAMOS`
+- `NO_COMPRAMOS`
 
-```json
-{
-  "ticker": "TEST_CONFIRM",
-  "market": "USA",
-  "timeframe": "1D",
-  "source": "mixed",
-  "reason": "Alerta de prueba para validar confirmacion pre-cierre.",
-  "close": 100.0,
-  "sma30": 99.0,
-  "asl21": 98.0,
-  "ema150": 90.0,
-  "ema200": 85.0,
-  "rsi": 60.0,
-  "rsi_ma": 55.0,
-  "koncorde_azul": 8.2,
-  "koncorde_azul_prev": 6.5,
-  "koncorde_marron": 14.4,
-  "koncorde_marron_prev": 12.8,
-  "koncorde_media": 10.1,
-  "ppo": 1.25,
-  "ppo_signal": 1.1,
-  "ppo_hist": 0.15,
-  "ppo_hist_prev": 0.07,
-  "volume_ok": true,
-  "support": 95.0,
-  "resistance": 101.0,
-  "target": 115.0,
-  "stop_loss": 95.0,
-  "weekly_context": "alcista",
-  "monthly_context": "sano",
-  "fundamental_context": "neutral",
-  "notes": "Prueba controlada."
-}
-```
+Backtesting result:
 
-## Discord
-
-El bot envia:
-
-- Alertas iniciales cuando detecta oportunidades.
-- Watchlist fuera de horario cuando se permite `allow_after_hours=true`.
-- Confirmaciones pre-cierre con decision final.
-
-La integracion usa `allowed_mentions` vacio para evitar pings no deseados. Si `DISCORD_WEBHOOK_URL` no esta configurado, el proyecto imprime el mensaje en consola para desarrollo local.
+- `TARGET_HIT`
+- `STOP_HIT`
+- `NO_RESULT`
+- `AMBIGUOUS`
+- `ERROR`
 
 ## Scheduler
 
-Por defecto esta desactivado:
-
-```env
-ENABLE_SCHEDULER=false
-SCHEDULER_INTERVAL_SECONDS=300
-```
-
-Para activarlo:
-
-```env
-ENABLE_SCHEDULER=true
-SCHEDULER_INTERVAL_SECONDS=300
-```
-
-Luego reiniciar FastAPI.
-
-Cuando esta activo:
-
-- Escanea la watchlist durante mercado abierto.
-- No crea alertas operativas si el mercado esta cerrado.
-- Ejecuta confirmacion pre-cierre alrededor de las 15:30 America/New_York.
-- Evita confirmar dos veces el mismo dia.
-
-Se puede revisar el estado con:
-
-```text
-GET /scheduler/status
-```
-
-Y ejecutar una corrida manual del scanner con:
-
-```text
-POST /scheduler/run-once
-```
-
-## Estados de alertas
-
-- `EN_OBSERVACION`: alerta activa pendiente de confirmacion.
-- `WATCHLIST`: oportunidad detectada fuera de horario. No es alerta operativa.
-- `COMPRAMOS`: alerta confirmada como compra por la logica pre-cierre.
-- `NO_COMPRAMOS`: alerta rechazada por la logica pre-cierre.
-- `ARCHIVED`: alerta archivada manualmente o por limpieza.
-
-Tambien existen estados historicos/internos del modelo, como `SIN_OPORTUNIDAD`, `ALERTA`, `CONFIRMADA`, `INVALIDADA` y `POSIBLE_SENUELO`.
-
-## Troubleshooting
-
-### Discord no recibe mensajes
-
-- Revisar `DISCORD_WEBHOOK_URL`.
-- Confirmar que el webhook de Discord no haya sido eliminado.
-- Revisar la consola de FastAPI.
-- Probar `POST /webhooks/test-discord`.
-
-### 401 Invalid webhook secret
-
-- Revisar `X-Webhook-Secret`.
-- Revisar `TRADINGVIEW_WEBHOOK_SECRET` en `.env`.
-- Si se usa TradingView, usar `?secret=test-secret` en la URL.
-
-### Scheduler no corre
-
-- Revisar `ENABLE_SCHEDULER=true`.
-- Reiniciar `uvicorn` despues de cambiar `.env`.
-- Revisar `GET /scheduler/status`.
-
-### `/scanner/run-watchlist` devuelve `scanned=0`
-
-- Revisar `GET /watchlist`.
-- Ejecutar `POST /watchlist/seed-defaults`.
-- Confirmar que los tickers esten `enabled=true`.
-
-### Not Found en endpoints nuevos
-
-- Reiniciar `uvicorn`.
-- Revisar `http://127.0.0.1:8000/docs`.
-- Confirmar que se esta apuntando al servidor correcto.
-
-### Mercado cerrado
-
-- El scanner operativo no crea alertas fuera de horario.
-- Usar `allow_after_hours=true` solo para crear `WATCHLIST`.
-
-## Roadmap
-
-- Historial de decisiones mas completo.
-- Backtesting.
-- Mejoras en analisis fundamental.
-- Mejor calculo de soportes y resistencias.
-- Integracion futura con Telegram.
-- Panel web.
-- Mejor manejo de feriados USA y half-days.
-- Metricas de performance del bot.
+- `ENABLE_SCHEDULER=true` activa el loop automatico.
+- `SCHEDULER_INTERVAL_SECONDS=1200` equivale a 20 minutos.
+- `is_running=true` significa que el loop automatico esta activo.
+- Mercado cerrado no apaga el scheduler; solo hace que esa corrida no cree alertas operativas.
+- `POST /scheduler/run-once` ejecuta una corrida manual aunque el scheduler automatico este apagado.
 
 ## Seguridad
 
-- No subir `.env` a Git.
-- No publicar webhooks, tokens ni secretos.
-- Rotar el webhook de Discord si fue compartido por error.
-- Cambiar `TRADINGVIEW_WEBHOOK_SECRET` en entornos reales.
+- No subir `.env`.
+- No subir bases SQLite (`*.db`, `*.sqlite`, `*.sqlite3`).
+- No compartir `DISCORD_WEBHOOK_URL`.
+- No compartir `TRADINGVIEW_WEBHOOK_SECRET`.
+- Usar secretos distintos por entorno.
+
+## Roadmap
+
+- v0.1.0 - Scanner + watchlist + decisiones.
+- v0.2.0 - Backtesting basico.
+- v0.3.0 - Dashboard summary + scheduler corregido.
+- v0.4.0 - Maintenance tools.
+- v0.5.0 - Documentacion y demo portfolio.
+
+Proximos pasos:
+
+- Deploy demo.
+- Dashboard web frontend.
+- Metricas avanzadas.
+- Backtesting con comisiones/slippage.
+- Reportes exportables.
+- Mejor soporte para feriados USA y half-days.
