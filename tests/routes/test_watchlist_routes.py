@@ -68,9 +68,9 @@ def test_scanner_run_watchlist_uses_only_enabled_tickers(client, monkeypatch):
         captured["tickers"] = tickers
         return scanner_service.ScannerWatchlistResult(scanned=len(tickers), created_alerts=[], skipped=[])
 
-    monkeypatch.setattr("app.main.is_market_open", lambda current_datetime: True)
-    monkeypatch.setattr("app.main.get_market_session_status", lambda current_datetime: "open")
-    monkeypatch.setattr("app.main.scan_watchlist", fake_scan_watchlist)
+    monkeypatch.setattr("app.routes.scanner_routes.is_market_open", lambda current_datetime: True)
+    monkeypatch.setattr("app.routes.scanner_routes.get_market_session_status", lambda current_datetime: "open")
+    monkeypatch.setattr("app.routes.scanner_routes.scan_watchlist", fake_scan_watchlist)
 
     response = client.post("/scanner/run-watchlist")
 
@@ -81,8 +81,8 @@ def test_scanner_run_watchlist_uses_only_enabled_tickers(client, monkeypatch):
 
 def test_scanner_run_watchlist_respects_market_closed(client, monkeypatch):
     client.post("/watchlist", json={"ticker": "AAPL", "market": "USA"})
-    monkeypatch.setattr("app.main.is_market_open", lambda current_datetime: False)
-    monkeypatch.setattr("app.main.get_market_session_status", lambda current_datetime: "post_market")
+    monkeypatch.setattr("app.routes.scanner_routes.is_market_open", lambda current_datetime: False)
+    monkeypatch.setattr("app.routes.scanner_routes.get_market_session_status", lambda current_datetime: "post_market")
 
     response = client.post("/scanner/run-watchlist")
 
