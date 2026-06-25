@@ -7,7 +7,7 @@ from app.models.alert import Alert
 from app.schemas.alert import AlertStatus, OpportunitySource
 from app.schemas.tradingview import TradingViewSignal
 from app.services.scanner_service import ScannerTickerResult, scan_watchlist
-from tests.test_webhook import EXAMPLE_SIGNAL
+from tests.routes.test_webhook_routes import EXAMPLE_SIGNAL
 
 
 def _create_operational_alert(client, reason: str | None = None) -> int:

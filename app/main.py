@@ -71,15 +71,28 @@ async def lifespan(app: FastAPI):
                 pass
 
 
-app = FastAPI(title=get_settings().app_name, lifespan=lifespan)
+OPENAPI_TAGS = [
+    {"name": "System", "description": "Estado general de la API."},
+    {"name": "Webhooks", "description": "Integraciones entrantes desde TradingView y pruebas de Discord."},
+    {"name": "Scanner", "description": "Ejecucion manual del scanner de oportunidades."},
+    {"name": "Scheduler", "description": "Estado y ejecucion manual del scheduler automatico."},
+    {"name": "Watchlist", "description": "Administracion de tickers monitoreados."},
+    {"name": "Alerts", "description": "Consulta y administracion del ciclo de vida de alertas."},
+    {"name": "Confirmations", "description": "Confirmacion pre-cierre de alertas activas."},
+    {"name": "Decisions", "description": "Historial y resumen de decisiones del bot."},
+    {"name": "Backtesting", "description": "Ejecucion y consulta de resultados de backtesting."},
+]
 
 
-@app.get("/")
+app = FastAPI(title=get_settings().app_name, lifespan=lifespan, openapi_tags=OPENAPI_TAGS)
+
+
+@app.get("/", tags=["System"], summary="Health check")
 def health_check() -> dict[str, str]:
     return {"status": "ok", "app": get_settings().app_name}
 
 
-@app.post("/webhooks/test-discord")
+@app.post("/webhooks/test-discord", tags=["Webhooks"], summary="Test Discord webhook")
 async def test_discord_webhook() -> dict[str, str]:
     embed = {
         "title": "Mu Trading Bot - Test Discord",
@@ -90,7 +103,7 @@ async def test_discord_webhook() -> dict[str, str]:
     return {"status": "discord_test_sent"}
 
 
-@app.post("/webhooks/tradingview", response_model=AlertResponse)
+@app.post("/webhooks/tradingview", response_model=AlertResponse, tags=["Webhooks"], summary="Receive TradingView signal")
 async def tradingview_webhook(
     signal: TradingViewSignal,
     _: None = Depends(validate_tradingview_secret),
@@ -171,7 +184,7 @@ async def _run_scanner_for_tickers(
     return _scanner_payload_from_result(result, debug=debug, session_status=None if market_open else session_status)
 
 
-@app.post("/scanner/run", response_model=ScannerResponse, response_model_exclude_none=True)
+@app.post("/scanner/run", response_model=ScannerResponse, response_model_exclude_none=True, tags=["Scanner"], summary="Run scanner")
 async def run_scanner(
     request: ScannerRequest,
     allow_after_hours: bool = Query(default=False),
@@ -188,7 +201,7 @@ async def run_scanner(
     )
 
 
-@app.post("/scanner/run-watchlist", response_model=ScannerResponse, response_model_exclude_none=True)
+@app.post("/scanner/run-watchlist", response_model=ScannerResponse, response_model_exclude_none=True, tags=["Scanner"], summary="Run watchlist scanner")
 async def run_watchlist_scanner(
     allow_after_hours: bool = Query(default=False),
     debug: bool = Query(default=False),
@@ -205,23 +218,23 @@ async def run_watchlist_scanner(
     )
 
 
-@app.get("/scheduler/status")
+@app.get("/scheduler/status", tags=["Scheduler"], summary="Get scheduler status")
 def scheduler_status() -> dict:
     settings = get_settings()
     return get_scheduler_status(settings.enable_scheduler, settings.scheduler_interval_seconds)
 
 
-@app.post("/scheduler/run-once")
+@app.post("/scheduler/run-once", tags=["Scheduler"], summary="Run scheduler once")
 async def scheduler_run_once() -> dict:
     return await run_scheduled_watchlist_scan(SessionLocal)
 
 
-@app.get("/watchlist", response_model=list[WatchlistTickerResponse])
+@app.get("/watchlist", response_model=list[WatchlistTickerResponse], tags=["Watchlist"], summary="Get watchlist")
 def get_watchlist(db: Session = Depends(get_db)) -> list:
     return list_watchlist_tickers(db)
 
 
-@app.post("/watchlist", response_model=WatchlistTickerResponse, status_code=status.HTTP_201_CREATED)
+@app.post("/watchlist", response_model=WatchlistTickerResponse, status_code=status.HTTP_201_CREATED, tags=["Watchlist"], summary="Add watchlist ticker")
 def add_watchlist_ticker(
     payload: WatchlistTickerCreate,
     db: Session = Depends(get_db),
@@ -232,7 +245,7 @@ def add_watchlist_ticker(
     return create_watchlist_ticker(db, payload)
 
 
-@app.post("/watchlist/seed-defaults")
+@app.post("/watchlist/seed-defaults", tags=["Watchlist"], summary="Seed default watchlist")
 def seed_watchlist_defaults(db: Session = Depends(get_db)) -> dict:
     created = seed_default_watchlist(db)
     return {
@@ -242,7 +255,7 @@ def seed_watchlist_defaults(db: Session = Depends(get_db)) -> dict:
     }
 
 
-@app.patch("/watchlist/{ticker}", response_model=WatchlistTickerResponse)
+@app.patch("/watchlist/{ticker}", response_model=WatchlistTickerResponse, tags=["Watchlist"], summary="Update watchlist ticker")
 def patch_watchlist_ticker(
     ticker: str,
     payload: WatchlistTickerUpdate,
@@ -254,7 +267,7 @@ def patch_watchlist_ticker(
     return update_watchlist_ticker(db, item, payload)
 
 
-@app.delete("/watchlist/{ticker}", response_model=WatchlistTickerResponse)
+@app.delete("/watchlist/{ticker}", response_model=WatchlistTickerResponse, tags=["Watchlist"], summary="Disable watchlist ticker")
 def delete_watchlist_ticker(
     ticker: str,
     db: Session = Depends(get_db),
@@ -282,22 +295,22 @@ def _alert_payload(alert: Alert) -> dict:
     }
 
 
-@app.get("/alerts/active")
+@app.get("/alerts/active", tags=["Alerts"], summary="Get active alerts")
 def active_alerts(db: Session = Depends(get_db)) -> list[dict]:
     return [_alert_payload(alert) for alert in list_active_alerts(db)]
 
 
-@app.get("/alerts/watchlist")
+@app.get("/alerts/watchlist", tags=["Alerts"], summary="Get watchlist alerts")
 def watchlist_alerts(db: Session = Depends(get_db)) -> list[dict]:
     return [_alert_payload(alert) for alert in list_watchlist_alerts(db)]
 
 
-@app.get("/alerts/archived")
+@app.get("/alerts/archived", tags=["Alerts"], summary="Get archived alerts")
 def archived_alerts(db: Session = Depends(get_db)) -> list[dict]:
     return [_alert_payload(alert) for alert in list_archived_alerts(db)]
 
 
-@app.patch("/alerts/{alert_id}/archive")
+@app.patch("/alerts/{alert_id}/archive", tags=["Alerts"], summary="Archive alert")
 def archive_single_alert(alert_id: int, db: Session = Depends(get_db)) -> dict:
     alert = db.get(Alert, alert_id)
     if alert is None:
@@ -305,13 +318,13 @@ def archive_single_alert(alert_id: int, db: Session = Depends(get_db)) -> dict:
     return _alert_payload(archive_alert(db, alert))
 
 
-@app.post("/alerts/archive-watchlist")
+@app.post("/alerts/archive-watchlist", tags=["Alerts"], summary="Archive watchlist alerts")
 def archive_all_watchlist_alerts(db: Session = Depends(get_db)) -> dict:
     archived_count = archive_watchlist_alerts(db)
     return {"status": "archived", "archived_count": archived_count}
 
 
-@app.post("/alerts/archive-test-alerts")
+@app.post("/alerts/archive-test-alerts", tags=["Alerts"], summary="Archive test alerts")
 def archive_all_test_alerts(db: Session = Depends(get_db)) -> dict:
     archived_count = archive_test_alerts(db)
     return {"status": "archived", "archived_count": archived_count}
@@ -334,22 +347,22 @@ def _decision_payload(decision: Decision) -> dict:
     }
 
 
-@app.get("/decisions")
+@app.get("/decisions", tags=["Decisions"], summary="Get decisions")
 def decisions_history(db: Session = Depends(get_db)) -> list[dict]:
     return [_decision_payload(decision) for decision in list_decisions(db)]
 
 
-@app.get("/decisions/summary")
+@app.get("/decisions/summary", tags=["Decisions"], summary="Get decisions summary")
 def decisions_summary(db: Session = Depends(get_db)) -> dict:
     return decision_summary(db)
 
 
-@app.get("/decisions/by-ticker/{ticker}")
+@app.get("/decisions/by-ticker/{ticker}", tags=["Decisions"], summary="Get decisions by ticker")
 def decisions_history_by_ticker(ticker: str, db: Session = Depends(get_db)) -> list[dict]:
     return [_decision_payload(decision) for decision in list_decisions_by_ticker(db, ticker)]
 
 
-@app.get("/decisions/{decision_id}")
+@app.get("/decisions/{decision_id}", tags=["Decisions"], summary="Get decision")
 def decision_detail(decision_id: int, db: Session = Depends(get_db)) -> dict:
     decision = get_decision(db, decision_id)
     if decision is None:
@@ -361,7 +374,7 @@ def _backtest_payload(result: BacktestResult) -> BacktestResultResponse:
     return BacktestResultResponse.model_validate(result)
 
 
-@app.post("/backtests/decisions/{decision_id}", response_model=BacktestResultResponse)
+@app.post("/backtests/decisions/{decision_id}", response_model=BacktestResultResponse, tags=["Backtesting"], summary="Run decision backtesting")
 def backtest_decision(
     decision_id: int,
     days: int = Query(default=10, ge=1, le=120),
@@ -371,7 +384,7 @@ def backtest_decision(
     return _backtest_payload(run_backtest_for_decision(db, decision_id, days=days, force=force))
 
 
-@app.post("/backtests/run", response_model=BacktestRunResponse)
+@app.post("/backtests/run", response_model=BacktestRunResponse, tags=["Backtesting"], summary="Run backtesting")
 def run_pending_backtests(
     days: int = Query(default=10, ge=1, le=120),
     force: bool = Query(default=False),
@@ -387,12 +400,12 @@ def run_pending_backtests(
     )
 
 
-@app.get("/backtests", response_model=list[BacktestResultResponse])
+@app.get("/backtests", response_model=list[BacktestResultResponse], tags=["Backtesting"], summary="Get backtests")
 def backtests_history(db: Session = Depends(get_db)) -> list[BacktestResultResponse]:
     return [_backtest_payload(result) for result in list_backtests(db)]
 
 
-@app.get("/backtests/summary")
+@app.get("/backtests/summary", tags=["Backtesting"], summary="Get backtesting summary")
 def backtests_summary(
     include_errors: bool = Query(default=False),
     db: Session = Depends(get_db),
@@ -400,7 +413,7 @@ def backtests_summary(
     return backtest_summary(db, include_errors=include_errors)
 
 
-@app.post("/confirmations/pre-close/{alert_id}")
+@app.post("/confirmations/pre-close/{alert_id}", tags=["Confirmations"], summary="Confirm alert pre-close")
 async def pre_close_confirmation_for_alert(
     alert_id: int,
     signal: TradingViewSignal,
@@ -426,7 +439,7 @@ async def pre_close_confirmation_for_alert(
 
 
 # MVP/testing: bulk confirmation uses stored alert data via the market-data placeholder until fresh data is integrated.
-@app.post("/confirmations/pre-close")
+@app.post("/confirmations/pre-close", tags=["Confirmations"], summary="Run pre-close confirmation")
 async def pre_close_confirmation(db: Session = Depends(get_db)) -> dict:
     decisions = await run_pre_close_confirmation(db)
     confirmed = sum(1 for decision in decisions if decision.decision == "COMPRAMOS")

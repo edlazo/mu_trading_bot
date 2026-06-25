@@ -3,7 +3,7 @@ from app.models.decision import Decision
 import pytest
 
 from app.schemas.alert import FinalDecision
-from tests.test_webhook import EXAMPLE_SIGNAL
+from tests.routes.test_webhook_routes import EXAMPLE_SIGNAL
 
 
 def _create_confirmed_decision(client, ticker: str = "AAPL", target: float = 218.0) -> dict:
