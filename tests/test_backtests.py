@@ -146,9 +146,28 @@ def test_backtests_summary_calculates_metrics(client, db_session):
         "no_result": 1,
         "ambiguous": 1,
         "error": 1,
-        "win_rate": pytest.approx(20.0),
+        "win_rate": pytest.approx(25.0),
         "average_pnl_percent": pytest.approx(2.5),
     }
+
+def test_backtests_summary_can_include_errors_in_win_rate(client, db_session):
+    db_session.add_all(
+        [
+            BacktestResult(decision_id=1, alert_id=1, ticker="AAPL", result="TARGET_HIT", days_checked=1, pnl_percent=10.0, reason="target"),
+            BacktestResult(decision_id=2, alert_id=2, ticker="MSFT", result="STOP_HIT", days_checked=1, pnl_percent=-5.0, reason="stop"),
+            BacktestResult(decision_id=3, alert_id=3, ticker="NVDA", result="NO_RESULT", days_checked=10, pnl_percent=2.5, reason="none"),
+            BacktestResult(decision_id=4, alert_id=4, ticker="TSLA", result="AMBIGUOUS", days_checked=1, pnl_percent=None, reason="ambiguous"),
+            BacktestResult(decision_id=5, alert_id=5, ticker="AMD", result="ERROR", days_checked=0, pnl_percent=None, reason="error"),
+        ]
+    )
+    db_session.commit()
+
+    response = client.get("/backtests/summary?include_errors=true")
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 5
+    assert response.json()["error"] == 1
+    assert response.json()["win_rate"] == pytest.approx(20.0)
 
 
 def test_backtest_does_not_duplicate_result_for_same_decision(client, db_session, monkeypatch):
@@ -182,6 +201,7 @@ def test_bulk_backtest_runs_only_pending_buy_decisions(client, db_session, monke
     first = _decision(db_session, ticker="AAPL")
     _decision(db_session, ticker="MSFT")
     _decision(db_session, ticker="TSLA", decision="NO_COMPRAMOS")
+    _decision(db_session, ticker="TEST_CONFIRM")
     db_session.add(BacktestResult(decision_id=first.id, alert_id=first.alert_id, ticker="AAPL", result="NO_RESULT", days_checked=10, reason="existing"))
     db_session.commit()
     _mock_download(monkeypatch, _price_data([111.0], [99.0], [110.0]))
@@ -192,6 +212,6 @@ def test_bulk_backtest_runs_only_pending_buy_decisions(client, db_session, monke
     payload = response.json()
     assert payload["status"] == "backtest_completed"
     assert payload["created"] == 1
-    assert payload["skipped"] == 1
+    assert payload["skipped"] == 2
     assert len(payload["results"]) == 1
     assert db_session.query(BacktestResult).count() == 2

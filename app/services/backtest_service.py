@@ -192,6 +192,9 @@ def run_backtests_for_pending_buy_decisions(db: Session, days: int = 10, force: 
     skipped = 0
 
     for decision in decisions:
+        if decision.ticker.upper().startswith("TEST_"):
+            skipped += 1
+            continue
         existing_result = get_backtest_by_decision_id(db, decision.id)
         if existing_result is not None and not force:
             skipped += 1
@@ -201,7 +204,7 @@ def run_backtests_for_pending_buy_decisions(db: Session, days: int = 10, force: 
     return results, skipped
 
 
-def backtest_summary(db: Session) -> dict:
+def backtest_summary(db: Session, include_errors: bool = False) -> dict:
     results = db.query(BacktestResult).all()
     total = len(results)
     target_hit = sum(1 for result in results if result.result == BacktestOutcome.TARGET_HIT.value)
@@ -209,7 +212,9 @@ def backtest_summary(db: Session) -> dict:
     no_result = sum(1 for result in results if result.result == BacktestOutcome.NO_RESULT.value)
     ambiguous = sum(1 for result in results if result.result == BacktestOutcome.AMBIGUOUS.value)
     error = sum(1 for result in results if result.result == BacktestOutcome.ERROR.value)
-    pnl_values = [result.pnl_percent for result in results if result.pnl_percent is not None]
+    metric_results = results if include_errors else [result for result in results if result.result != BacktestOutcome.ERROR.value]
+    metric_total = len(metric_results)
+    pnl_values = [result.pnl_percent for result in metric_results if result.pnl_percent is not None]
     return {
         "total": total,
         "target_hit": target_hit,
@@ -217,6 +222,6 @@ def backtest_summary(db: Session) -> dict:
         "no_result": no_result,
         "ambiguous": ambiguous,
         "error": error,
-        "win_rate": (target_hit / total * 100) if total else 0.0,
+        "win_rate": (target_hit / metric_total * 100) if metric_total else 0.0,
         "average_pnl_percent": (sum(pnl_values) / len(pnl_values)) if pnl_values else 0.0,
     }
