@@ -23,6 +23,7 @@ WatchlistScannerRunner = Callable[[Session], Awaitable[ScannerWatchlistResult]]
 last_confirmation_date: date | None = None
 last_confirmation_at: datetime | None = None
 last_confirmation_result: dict | None = None
+is_running: bool = False
 is_scan_running: bool = False
 last_run_at: datetime | None = None
 last_result: dict | None = None
@@ -41,7 +42,7 @@ def get_scheduler_status(enabled: bool, interval_seconds: int) -> dict:
     return {
         "enabled": enabled,
         "interval_seconds": interval_seconds,
-        "is_running": is_scan_running,
+        "is_running": is_running,
         "last_run_at": last_run_at.isoformat() if last_run_at else None,
         "last_result": last_result,
         "last_confirmation_at": last_confirmation_at.isoformat() if last_confirmation_at else None,
@@ -208,10 +209,15 @@ async def run_scheduler_check(
 
 
 async def scheduler_loop(db_session_factory, interval_seconds: int = 300) -> None:
-    print("Scheduler enabled")
-    while True:
-        try:
-            await run_scheduler_check(db_session_factory, datetime.now(UTC))
-        except Exception as exc:
-            print(f"Scheduler error: {exc}")
-        await asyncio.sleep(interval_seconds)
+    global is_running
+    is_running = True
+    print("Scheduler started")
+    try:
+        while True:
+            try:
+                await run_scheduler_check(db_session_factory, datetime.now(UTC))
+            except Exception as exc:
+                print(f"Scheduler error: {exc}")
+            await asyncio.sleep(interval_seconds)
+    finally:
+        is_running = False

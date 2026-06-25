@@ -16,6 +16,7 @@ from app.models.backtest import BacktestResult
 from app.models.decision import Decision
 from app.schemas.alert import AlertResponse, AlertStatus
 from app.schemas.backtest import BacktestResultResponse, BacktestRunResponse
+from app.schemas.dashboard import DashboardSummaryResponse
 from app.schemas.scanner import ScannerRequest, ScannerResponse
 from app.schemas.tradingview import TradingViewSignal
 from app.schemas.watchlist import WatchlistTickerCreate, WatchlistTickerResponse, WatchlistTickerUpdate
@@ -30,8 +31,10 @@ from app.services.alert_service import (
 )
 from app.services.confirmation_service import confirm_alert_with_signal, run_pre_close_confirmation
 from app.services.backtest_service import backtest_summary, list_backtests, run_backtest_for_decision, run_backtests_for_pending_buy_decisions
+from app.services.dashboard_service import get_dashboard_summary
 from app.services.decision_service import decision_summary, get_decision, list_decisions, list_decisions_by_ticker
 from app.services.scanner_service import scan_watchlist
+import app.services.scheduler_service as scheduler_service
 from app.services.scheduler_service import get_scheduler_status, run_scheduled_watchlist_scan, scheduler_loop
 from app.services.watchlist_service import (
     create_watchlist_ticker,
@@ -55,10 +58,17 @@ async def lifespan(app: FastAPI):
     app.state.scheduler_enabled = settings.enable_scheduler
 
     if settings.enable_scheduler:
+        print("Scheduler enabled")
+        scheduler_service.is_running = True
         scheduler_task = asyncio.create_task(
             scheduler_loop(SessionLocal, settings.scheduler_interval_seconds)
         )
         app.state.scheduler_task = scheduler_task
+    else:
+        print("Scheduler disabled")
+        scheduler_service.is_running = False
+        if hasattr(app.state, "scheduler_task"):
+            delattr(app.state, "scheduler_task")
 
     try:
         yield
@@ -69,6 +79,10 @@ async def lifespan(app: FastAPI):
                 await scheduler_task
             except asyncio.CancelledError:
                 pass
+            finally:
+                scheduler_service.is_running = False
+                if hasattr(app.state, "scheduler_task"):
+                    delattr(app.state, "scheduler_task")
 
 
 OPENAPI_TAGS = [
@@ -81,6 +95,7 @@ OPENAPI_TAGS = [
     {"name": "Confirmations", "description": "Confirmacion pre-cierre de alertas activas."},
     {"name": "Decisions", "description": "Historial y resumen de decisiones del bot."},
     {"name": "Backtesting", "description": "Ejecucion y consulta de resultados de backtesting."},
+    {"name": "Dashboard", "description": "Resumen centralizado del estado general del bot."},
 ]
 
 
@@ -217,6 +232,10 @@ async def run_watchlist_scanner(
         db=db,
     )
 
+
+@app.get("/dashboard/summary", response_model=DashboardSummaryResponse, tags=["Dashboard"], summary="Get dashboard summary")
+def dashboard_summary(db: Session = Depends(get_db)) -> DashboardSummaryResponse:
+    return get_dashboard_summary(db)
 
 @app.get("/scheduler/status", tags=["Scheduler"], summary="Get scheduler status")
 def scheduler_status() -> dict:
