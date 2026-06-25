@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     tradingview_webhook_secret: str = "change-me"
     enable_scheduler: bool = False
     scheduler_interval_seconds: int = 300
+    scanner_batch_size: int | None = None
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

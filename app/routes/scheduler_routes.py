@@ -15,4 +15,5 @@ def scheduler_status() -> dict:
 
 @router.post("/run-once", summary="Run scheduler once")
 async def scheduler_run_once() -> dict:
-    return await run_scheduled_watchlist_scan(SessionLocal)
+    settings = get_settings()
+    return await run_scheduled_watchlist_scan(SessionLocal, scanner_batch_size=settings.scanner_batch_size)

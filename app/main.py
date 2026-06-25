@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
         print("Scheduler enabled")
         scheduler_service.is_running = True
         scheduler_task = asyncio.create_task(
-            scheduler_loop(SessionLocal, settings.scheduler_interval_seconds)
+            scheduler_loop(SessionLocal, settings.scheduler_interval_seconds, settings.scanner_batch_size)
         )
         app.state.scheduler_task = scheduler_task
     else:
