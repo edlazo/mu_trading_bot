@@ -28,8 +28,8 @@ def _signal(ticker: str = "AAPL") -> TradingViewSignal:
 
 @pytest.fixture(autouse=True)
 def scanner_market_is_open(monkeypatch):
-    monkeypatch.setattr("app.main.is_market_open", lambda current_datetime: True)
-    monkeypatch.setattr("app.main.get_market_session_status", lambda current_datetime: "open")
+    monkeypatch.setattr("app.routes.scanner_routes.is_market_open", lambda current_datetime: True)
+    monkeypatch.setattr("app.routes.scanner_routes.get_market_session_status", lambda current_datetime: "open")
 
 
 
@@ -46,7 +46,7 @@ def test_scanner_run_endpoint_returns_scan_summary(client, monkeypatch):
     async def fake_scan_watchlist(db, tickers, force_alert=False, **kwargs):
         return result
 
-    monkeypatch.setattr("app.main.scan_watchlist", fake_scan_watchlist)
+    monkeypatch.setattr("app.routes.scanner_routes.scan_watchlist", fake_scan_watchlist)
 
     response = client.post("/scanner/run", json={"tickers": ["AAPL", "MSFT", "NVDA"]})
 
@@ -85,7 +85,7 @@ def test_scanner_run_force_alert_passes_flag(client, monkeypatch):
             skipped=[],
         )
 
-    monkeypatch.setattr("app.main.scan_watchlist", fake_scan_watchlist)
+    monkeypatch.setattr("app.routes.scanner_routes.scan_watchlist", fake_scan_watchlist)
 
     response = client.post("/scanner/run?force_alert=true", json={"tickers": ["AAPL"]})
 
@@ -155,7 +155,7 @@ def test_scanner_run_debug_includes_technical_metrics(client, monkeypatch):
     async def fake_scan_watchlist(db, tickers, force_alert=False, **kwargs):
         return result
 
-    monkeypatch.setattr("app.main.scan_watchlist", fake_scan_watchlist)
+    monkeypatch.setattr("app.routes.scanner_routes.scan_watchlist", fake_scan_watchlist)
 
     response = client.post("/scanner/run?debug=true", json={"tickers": ["AAPL"]})
 
@@ -181,7 +181,7 @@ def test_scanner_run_debug_includes_created_ticker_debug(client, monkeypatch):
     async def fake_scan_watchlist(db, tickers, force_alert=False, **kwargs):
         return result
 
-    monkeypatch.setattr("app.main.scan_watchlist", fake_scan_watchlist)
+    monkeypatch.setattr("app.routes.scanner_routes.scan_watchlist", fake_scan_watchlist)
 
     response = client.post("/scanner/run?debug=true", json={"tickers": ["NVDA"]})
 
@@ -193,8 +193,8 @@ def test_scanner_run_debug_includes_created_ticker_debug(client, monkeypatch):
 
 
 def test_scanner_run_market_closed_without_after_hours_does_not_create_alerts(client, monkeypatch):
-    monkeypatch.setattr("app.main.is_market_open", lambda current_datetime: False)
-    monkeypatch.setattr("app.main.get_market_session_status", lambda current_datetime: "post_market")
+    monkeypatch.setattr("app.routes.scanner_routes.is_market_open", lambda current_datetime: False)
+    monkeypatch.setattr("app.routes.scanner_routes.get_market_session_status", lambda current_datetime: "post_market")
 
     response = client.post("/scanner/run", json={"tickers": ["AAPL"]})
 
@@ -208,8 +208,8 @@ def test_scanner_run_market_closed_without_after_hours_does_not_create_alerts(cl
 
 
 def test_scanner_run_after_hours_creates_watchlist_alert(client, monkeypatch):
-    monkeypatch.setattr("app.main.is_market_open", lambda current_datetime: False)
-    monkeypatch.setattr("app.main.get_market_session_status", lambda current_datetime: "post_market")
+    monkeypatch.setattr("app.routes.scanner_routes.is_market_open", lambda current_datetime: False)
+    monkeypatch.setattr("app.routes.scanner_routes.get_market_session_status", lambda current_datetime: "post_market")
     monkeypatch.setattr(
         scanner_service,
         "scan_ticker",
