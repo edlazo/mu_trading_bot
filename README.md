@@ -1,78 +1,92 @@
 # Mu Trading Bot
 
-## Descripcion
+Mu Trading Bot is a FastAPI backend that scans technical trading opportunities, manages a configurable watchlist, sends Discord alerts, confirms pre-close decisions, and evaluates results with basic backtesting.
 
-Mu Trading Bot es una API backend para escanear oportunidades tecnicas de trading, crear alertas, confirmar decisiones pre-cierre y evaluar resultados mediante backtesting basico.
+This is an educational and portfolio project. It does not execute trades automatically, it is not financial advice, and it does not guarantee profitability. The project is designed to demonstrate backend engineering, data processing, scheduling, testing, integrations, and API architecture.
 
-El sistema esta pensado como herramienta educativa, de soporte de decision y portfolio tecnico. No compra ni vende automaticamente, no opera cuentas reales y no debe interpretarse como asesoramiento financiero. La decision final de ejecutar una operacion siempre queda en manos del usuario.
+## Key Features
 
-## Features
+- Modular FastAPI API with `APIRouter`.
+- Configurable persistent watchlist.
+- S&P 500 import and synchronization.
+- Scanner batching with `limit` and `offset` for large watchlists.
+- Technical indicators: SMA30, ASL21, EMA150, EMA200, RSI, PPO, support, and resistance.
+- Risk/reward validation before creating operational alerts.
+- Discord alerting through webhooks.
+- Pre-close confirmation workflow for `COMPRAMOS` / `NO_COMPRAMOS` decisions.
+- Scheduler with batch scanning and pre-close confirmation support.
+- Basic backtesting for confirmed buy decisions.
+- Dashboard summary endpoint.
+- Maintenance tools for test data cleanup.
+- Swagger organized by tags.
+- Automated tests with pytest.
 
-- Watchlist configurable y persistente.
-- Scanner tecnico con filtros operativos.
-- Validacion de relacion riesgo/beneficio.
-- Alertas `EN_OBSERVACION` durante mercado abierto.
-- Alertas `WATCHLIST` fuera de horario cuando se permite `allow_after_hours=true`.
-- Confirmaciones pre-cierre con decision `COMPRAMOS` / `NO_COMPRAMOS`.
-- Integracion con Discord Webhooks.
-- Webhook compatible con TradingView y Postman.
-- Scheduler automatico opcional.
-- Backtesting basico para decisiones `COMPRAMOS`.
-- Dashboard summary centralizado.
-- Maintenance tools para datos de prueba.
-- Swagger organizado por modulos/tags.
-- Tests automatizados con pytest.
-- Rutas organizadas con `APIRouter` en `app/routes/`.
-
-## Stack
-
-- Python
-- FastAPI
-- SQLAlchemy
-- SQLite
-- Pydantic / Pydantic Settings
-- yfinance
-- pandas
-- numpy
-- httpx
-- pytest
-- Discord Webhooks
-
-## Arquitectura
+## Architecture
 
 ```text
 mu_trading_bot/
-  main.py                  Entrypoint raiz: from app.main import app
+  main.py
   app/
-    __init__.py
-    main.py                Configuracion FastAPI, lifespan, routers y OpenAPI tags
-    routes/                Endpoints FastAPI por modulo
-    core/                  Indicadores, riesgo, decision y horarios de mercado
-    database/              Engine, sesiones y base SQLAlchemy
-    integrations/          Discord y validacion TradingView
-    models/                Modelos SQLAlchemy
-    schemas/               Schemas Pydantic
-    services/              Logica de aplicacion
+    main.py
+    routes/
+    core/
+    services/
+    models/
+    schemas/
+    integrations/
+    database/
   tests/
-    routes/                Tests de endpoints
-    services/              Tests de servicios
-    core/                  Tests de logica pura
-    conftest.py
-  docs/                    Documentacion adicional
-  examples/                Payloads de ejemplo
+  docs/
+  examples/
 ```
 
-`main.py` raiz permite correr la API como `main:app`, mientras que `app.main:app` sigue funcionando para compatibilidad.
+- `main.py`: root ASGI entrypoint that imports `app.main:app`.
+- `app/main.py`: FastAPI app creation, OpenAPI tags, router registration, startup lifespan, and scheduler integration.
+- `app/routes/`: API layer, grouped by module with `APIRouter`.
+- `app/services/`: application workflows such as scanning, confirmations, decisions, backtesting, dashboard summaries, and maintenance.
+- `app/core/`: scanner support logic, indicators, risk rules, decision rules, market hours, and message builders.
+- `app/integrations/`: external services such as Discord and TradingView webhook validation.
+- `app/models/`: SQLAlchemy persistence models.
+- `app/schemas/`: Pydantic schemas and enums.
+- `app/database/`: SQLAlchemy engine, session, and base metadata.
+- `tests/`: route, service, and core tests.
+- `docs/`: project documentation.
+- `examples/`: demo payloads and local API requests.
 
-## Variables de entorno
+## API Modules
 
-Copiar `.env.example` a `.env` para desarrollo local:
+- System
+- Dashboard
+- Watchlist
+- Scanner
+- Alerts
+- Confirmations
+- Decisions
+- Backtesting
+- Scheduler
+- Maintenance
+- Webhooks
+
+Swagger is available at `http://127.0.0.1:8000/docs` and is organized with these tags.
+
+## Local Setup
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 cp .env.example .env
+.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Variables disponibles:
+Local URLs:
+
+- API: http://127.0.0.1:8000
+- Swagger: http://127.0.0.1:8000/docs
+
+## Environment Variables
+
+Safe defaults are provided in `.env.example`:
 
 ```env
 APP_NAME=Mu Trading Bot
@@ -82,232 +96,70 @@ DISCORD_WEBHOOK_URL=
 TRADINGVIEW_WEBHOOK_SECRET=change-me
 ENABLE_SCHEDULER=false
 SCHEDULER_INTERVAL_SECONDS=1200
+SCANNER_BATCH_SIZE=50
 ```
 
-Notas:
+Notes:
 
-- `.env` no se sube al repo.
-- `DISCORD_WEBHOOK_URL` es privado.
-- `TRADINGVIEW_WEBHOOK_SECRET` protege el webhook de TradingView/Postman.
-- `ENABLE_SCHEDULER=true` activa el loop automatico al iniciar FastAPI.
-- `SCHEDULER_INTERVAL_SECONDS=1200` equivale a 20 minutos.
+- `.env` is ignored and must not be committed.
+- `DISCORD_WEBHOOK_URL` is private.
+- `TRADINGVIEW_WEBHOOK_SECRET` protects the TradingView webhook.
+- `ENABLE_SCHEDULER=true` starts the automatic scheduler loop.
+- `SCANNER_BATCH_SIZE` controls how many enabled watchlist tickers the scheduler scans per run.
 
-## Instalacion local
+## Demo Flow
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-```
+A complete local demo flow is documented in [docs/PORTFOLIO_DEMO.md](docs/PORTFOLIO_DEMO.md).
 
-## Ejecutar API
+Quick version:
 
-Comando recomendado:
+1. Start the API.
+2. Open Swagger.
+3. Import S&P 500 tickers.
+4. Check `GET /dashboard/summary`.
+5. Run a scanner batch with `POST /scanner/run-watchlist?allow_after_hours=true&debug=true&limit=10&offset=0`.
+6. Check alerts.
+7. Run `POST /scheduler/run-once`.
+8. Use `POST /scheduler/run-once?force_pre_close=true` for demo/dev pre-close validation.
+9. Check decisions.
+10. Run basic backtesting.
+11. Check backtesting summary.
 
-```bash
-.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000 --reload
-```
+`force_pre_close=true` is intended for local demo and development validation. It should not be used as a production trading signal shortcut.
 
-Comando compatible:
-
-```bash
-.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
-```
-
-URLs:
-
-- API: http://127.0.0.1:8000
-- Swagger: http://127.0.0.1:8000/docs
-
-## Ejecutar tests
+## Development Commands
 
 ```bash
 task test
 ```
 
-Alternativa:
+Alternative:
 
 ```bash
 python -m pytest
 ```
 
-## Flujo principal
+## Documentation
 
-1. Cargar o sembrar la watchlist.
-2. Ejecutar el scanner manual o automaticamente.
-3. Si el mercado esta cerrado y `allow_after_hours=true`, el bot puede crear `WATCHLIST` solo si hay R/R valido.
-4. Si el mercado esta abierto, el scanner puede crear alertas `EN_OBSERVACION`.
-5. En pre-cierre, el bot confirma alertas activas.
-6. La confirmacion crea decisiones `COMPRAMOS` / `NO_COMPRAMOS`.
-7. El backtesting evalua decisiones `COMPRAMOS` contra precios posteriores.
-8. El dashboard resume el estado general.
-9. Maintenance permite revisar y limpiar datos de prueba `TEST_`.
+- [API examples](docs/API_EXAMPLES.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Portfolio demo](docs/PORTFOLIO_DEMO.md)
+- [Screenshots checklist](docs/SCREENSHOTS.md)
+- [Known limitations](docs/KNOWN_LIMITATIONS.md)
+- [Disclaimer](docs/DISCLAIMER.md)
+- [Versions](docs/VERSIONS.md)
+- [Roadmap](docs/ROADMAP.md)
+- [TradingView webhook setup](docs/tradingview-webhook.md)
 
-## Endpoints principales
+## Safety Notes
 
-### System
+- This project does not execute broker orders.
+- This project is not financial advice.
+- The user is responsible for their own investment decisions.
+- Public market data can be delayed, incomplete, or unavailable.
+- Backtesting is basic and does not fully model execution, slippage, fees, or liquidity.
+- No result in this repository should be interpreted as a promise of profitability.
 
-- `GET /`
+## License / Portfolio Use
 
-### Dashboard
-
-- `GET /dashboard/summary`
-
-### Watchlist
-
-- `GET /watchlist`
-- `POST /watchlist`
-- `PATCH /watchlist/{ticker}`
-- `DELETE /watchlist/{ticker}`
-- `POST /watchlist/seed-defaults`
-
-### Scanner
-
-- `POST /scanner/run`
-- `POST /scanner/run-watchlist`
-
-### Alerts
-
-- `GET /alerts/active`
-- `GET /alerts/watchlist`
-- `GET /alerts/archived`
-- `PATCH /alerts/{alert_id}/archive`
-- `POST /alerts/archive-watchlist`
-- `POST /alerts/archive-test-alerts`
-
-### Confirmations
-
-- `POST /confirmations/pre-close`
-- `POST /confirmations/pre-close/{alert_id}`
-
-### Decisions
-
-- `GET /decisions`
-- `GET /decisions/summary`
-- `GET /decisions/{decision_id}`
-- `GET /decisions/by-ticker/{ticker}`
-
-### Backtesting
-
-- `GET /backtests`
-- `GET /backtests/summary`
-- `POST /backtests/run`
-- `POST /backtests/decisions/{decision_id}`
-
-### Scheduler
-
-- `GET /scheduler/status`
-- `POST /scheduler/run-once`
-
-### Maintenance
-
-- `GET /maintenance/test-data/summary`
-- `POST /maintenance/cleanup-test-data`
-
-### Webhooks
-
-- `POST /webhooks/tradingview`
-- `POST /webhooks/test-discord`
-
-## Ejemplos de uso
-
-### 1. Seed watchlist
-
-```bash
-curl -X POST http://127.0.0.1:8000/watchlist/seed-defaults
-```
-
-### 2. Run scanner watchlist fuera de horario
-
-```bash
-curl -X POST "http://127.0.0.1:8000/scanner/run-watchlist?allow_after_hours=true&debug=true"
-```
-
-### 3. Get active alerts
-
-```bash
-curl http://127.0.0.1:8000/alerts/active
-```
-
-### 4. Pre-close confirmation
-
-```bash
-curl -X POST http://127.0.0.1:8000/confirmations/pre-close
-```
-
-### 5. Run backtesting
-
-```bash
-curl -X POST "http://127.0.0.1:8000/backtests/run?days=10"
-```
-
-### 6. Get dashboard summary
-
-```bash
-curl http://127.0.0.1:8000/dashboard/summary
-```
-
-### 7. Maintenance dry run
-
-```bash
-curl -X POST "http://127.0.0.1:8000/maintenance/cleanup-test-data?dry_run=true"
-```
-
-Mas ejemplos en [docs/API_EXAMPLES.md](docs/API_EXAMPLES.md).
-
-## Estados y decisiones
-
-Alert status principales:
-
-- `EN_OBSERVACION`: alerta operativa activa pendiente de confirmacion.
-- `WATCHLIST`: oportunidad fuera de horario, no operativa.
-- `ARCHIVED`: alerta archivada.
-- `COMPRAMOS`: alerta confirmada positivamente.
-- `NO_COMPRAMOS`: alerta rechazada.
-
-Decision:
-
-- `COMPRAMOS`
-- `NO_COMPRAMOS`
-
-Backtesting result:
-
-- `TARGET_HIT`
-- `STOP_HIT`
-- `NO_RESULT`
-- `AMBIGUOUS`
-- `ERROR`
-
-## Scheduler
-
-- `ENABLE_SCHEDULER=true` activa el loop automatico.
-- `SCHEDULER_INTERVAL_SECONDS=1200` equivale a 20 minutos.
-- `is_running=true` significa que el loop automatico esta activo.
-- Mercado cerrado no apaga el scheduler; solo hace que esa corrida no cree alertas operativas.
-- `POST /scheduler/run-once` ejecuta una corrida manual aunque el scheduler automatico este apagado.
-
-## Seguridad
-
-- No subir `.env`.
-- No subir bases SQLite (`*.db`, `*.sqlite`, `*.sqlite3`).
-- No compartir `DISCORD_WEBHOOK_URL`.
-- No compartir `TRADINGVIEW_WEBHOOK_SECRET`.
-- Usar secretos distintos por entorno.
-
-## Roadmap
-
-- v0.1.0 - Scanner + watchlist + decisiones.
-- v0.2.0 - Backtesting basico.
-- v0.3.0 - Dashboard summary + scheduler corregido.
-- v0.4.0 - Maintenance tools.
-- v0.5.0 - Documentacion y demo portfolio.
-
-Proximos pasos:
-
-- Deploy demo.
-- Dashboard web frontend.
-- Metricas avanzadas.
-- Backtesting con comisiones/slippage.
-- Reportes exportables.
-- Mejor soporte para feriados USA y half-days.
+This repository is prepared as a technical portfolio project. Before publishing, review local files and make sure `.env`, SQLite databases, private Discord webhook URLs, and any personal data are not included.

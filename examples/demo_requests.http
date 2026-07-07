@@ -1,0 +1,35 @@
+### Health check
+GET http://127.0.0.1:8000/
+
+### Dashboard summary
+GET http://127.0.0.1:8000/dashboard/summary
+
+### Import S&P 500 tickers
+POST http://127.0.0.1:8000/watchlist/import-sp500
+
+### Get watchlist
+GET http://127.0.0.1:8000/watchlist
+
+### Run watchlist scanner batch
+POST http://127.0.0.1:8000/scanner/run-watchlist?allow_after_hours=true&debug=true&limit=10&offset=0
+
+### Get active alerts
+GET http://127.0.0.1:8000/alerts/active
+
+### Get watchlist alerts
+GET http://127.0.0.1:8000/alerts/watchlist
+
+### Run scheduler once
+POST http://127.0.0.1:8000/scheduler/run-once
+
+### Force pre-close confirmation for local demo/dev
+POST http://127.0.0.1:8000/scheduler/run-once?force_pre_close=true
+
+### Get scheduler status
+GET http://127.0.0.1:8000/scheduler/status
+
+### Get decisions
+GET http://127.0.0.1:8000/decisions
+
+### Get backtesting summary
+GET http://127.0.0.1:8000/backtests/summary
