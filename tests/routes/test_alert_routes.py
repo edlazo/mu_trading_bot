@@ -160,3 +160,45 @@ def test_alert_admin_routes_are_registered_in_openapi(client):
     assert "post" in paths["/alerts/archive-watchlist"]
     assert "post" in paths["/alerts/archive-test-alerts"]
     assert "get" in paths["/alerts/archived"]
+
+
+def test_get_alert_by_id_returns_non_active_alert(client, db_session):
+    alert = _db_alert("AES", AlertStatus.NO_COMPRAMOS)
+    db_session.add(alert)
+    db_session.commit()
+    db_session.refresh(alert)
+
+    response = client.get(f"/alerts/{alert.id}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == alert.id
+    assert payload["ticker"] == "AES"
+    assert payload["status"] == AlertStatus.NO_COMPRAMOS.value
+
+
+def test_get_missing_alert_by_id_returns_404(client):
+    response = client.get("/alerts/999999")
+
+    assert response.status_code == 404
+
+
+def test_get_alerts_by_ticker_returns_history(client, db_session):
+    db_session.add(_db_alert("AES", AlertStatus.EN_OBSERVACION))
+    db_session.add(_db_alert("AES", AlertStatus.COMPRAMOS))
+    db_session.add(_db_alert("MSFT", AlertStatus.EN_OBSERVACION))
+    db_session.commit()
+
+    response = client.get("/alerts/by-ticker/aes")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload) == 2
+    assert {item["ticker"] for item in payload} == {"AES"}
+
+
+def test_alert_lookup_routes_are_registered_in_openapi(client):
+    paths = client.get("/openapi.json").json()["paths"]
+
+    assert "get" in paths["/alerts/{alert_id}"]
+    assert "get" in paths["/alerts/by-ticker/{ticker}"]

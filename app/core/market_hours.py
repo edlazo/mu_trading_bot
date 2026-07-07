@@ -52,6 +52,26 @@ def is_confirmation_time(
     return 0 <= delta_seconds < tolerance_seconds
 
 
+
+def is_pre_close_window(
+    current_datetime: datetime,
+    config: MarketHoursConfig = USA_MARKET_HOURS,
+    start_minutes_before_close: int = 35,
+    end_minutes_before_close: int = 5,
+) -> bool:
+    current_market_datetime = current_datetime.astimezone(config.timezone)
+    if not is_weekday_market_day(current_market_datetime):
+        return False
+
+    close_datetime = datetime.combine(
+        current_market_datetime.date(),
+        config.market_close_time,
+        tzinfo=config.timezone,
+    )
+    seconds_before_close = (close_datetime - current_market_datetime).total_seconds()
+    start_seconds = start_minutes_before_close * 60
+    end_seconds = end_minutes_before_close * 60
+    return end_seconds <= seconds_before_close <= start_seconds
 def is_market_open(
     current_datetime: datetime,
     config: MarketHoursConfig = USA_MARKET_HOURS,

@@ -106,6 +106,7 @@ NEW_YORK = ZoneInfo("America/New_York")
 def reset_scheduler_state():
     scheduler_service.is_running = False
     scheduler_service.is_scan_running = False
+    scheduler_service.scanner_batch_offset = 0
     scheduler_service.last_run_at = None
     scheduler_service.last_result = None
     scheduler_service.last_confirmation_date = None
@@ -233,3 +234,179 @@ async def test_scheduler_does_not_execute_confirmation_twice_same_day(db_session
     await scheduler_service.run_scheduler_check(Factory(), current_datetime, fake_confirmation_runner, fake_watchlist_scanner)
 
     assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_scheduler_outside_pre_close_window_runs_scanner(db_session):
+    reset_scheduler_state()
+    calls = {"scanner": 0, "confirmation": 0}
+
+    class Factory:
+        def __call__(self):
+            return db_session
+
+    async def fake_confirmation_runner(db):
+        calls["confirmation"] += 1
+        return []
+
+    async def fake_watchlist_scanner(db):
+        calls["scanner"] += 1
+        return ScannerWatchlistResult(scanned=0, created_alerts=[], skipped=[])
+
+    result = await scheduler_service.run_scheduler_once(
+        Factory(),
+        datetime(2026, 6, 23, 10, 0, tzinfo=NEW_YORK),
+        fake_confirmation_runner,
+        fake_watchlist_scanner,
+    )
+
+    assert result["status"] == "scanner_completed"
+    assert calls == {"scanner": 1, "confirmation": 0}
+
+
+@pytest.mark.asyncio
+async def test_scheduler_inside_pre_close_window_runs_confirmation(db_session):
+    reset_scheduler_state()
+    calls = {"scanner": 0, "confirmation": 0}
+
+    class Factory:
+        def __call__(self):
+            return db_session
+
+    async def fake_confirmation_runner(db):
+        calls["confirmation"] += 1
+        return []
+
+    async def fake_watchlist_scanner(db):
+        calls["scanner"] += 1
+        return ScannerWatchlistResult(scanned=0, created_alerts=[], skipped=[])
+
+    result = await scheduler_service.run_scheduler_once(
+        Factory(),
+        datetime(2026, 6, 23, 15, 45, tzinfo=NEW_YORK),
+        fake_confirmation_runner,
+        fake_watchlist_scanner,
+    )
+
+    assert result["status"] == "pre_close_confirmation_completed"
+    assert calls == {"scanner": 0, "confirmation": 1}
+    assert scheduler_service.last_confirmation_date.isoformat() == "2026-06-23"
+
+
+@pytest.mark.asyncio
+async def test_scheduler_pre_close_window_does_not_require_exact_minute(db_session):
+    reset_scheduler_state()
+    calls = 0
+
+    class Factory:
+        def __call__(self):
+            return db_session
+
+    async def fake_confirmation_runner(db):
+        nonlocal calls
+        calls += 1
+        return []
+
+    await scheduler_service.run_scheduler_once(
+        Factory(),
+        datetime(2026, 6, 23, 15, 52, tzinfo=NEW_YORK),
+        fake_confirmation_runner,
+    )
+
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_scheduler_does_not_duplicate_pre_close_in_same_window(db_session):
+    reset_scheduler_state()
+    calls = 0
+
+    class Factory:
+        def __call__(self):
+            return db_session
+
+    async def fake_confirmation_runner(db):
+        nonlocal calls
+        calls += 1
+        return []
+
+    first = await scheduler_service.run_scheduler_once(
+        Factory(),
+        datetime(2026, 6, 23, 15, 25, tzinfo=NEW_YORK),
+        fake_confirmation_runner,
+    )
+    second = await scheduler_service.run_scheduler_once(
+        Factory(),
+        datetime(2026, 6, 23, 15, 50, tzinfo=NEW_YORK),
+        fake_confirmation_runner,
+    )
+
+    assert first["status"] == "pre_close_confirmation_completed"
+    assert second["status"] == "pre_close_already_ran"
+    assert second["market_date"] == "2026-06-23"
+    assert calls == 1
+
+
+def test_scheduler_status_includes_pre_close_and_batch_fields():
+    reset_scheduler_state()
+
+    payload = scheduler_service.get_scheduler_status(
+        enabled=True,
+        interval_seconds=1200,
+        scanner_batch_size=100,
+        current_datetime=datetime(2026, 6, 23, 15, 40, tzinfo=NEW_YORK),
+    )
+
+    assert payload["scanner_batch_size"] == 100
+    assert payload["scanner_next_offset"] == 0
+    assert payload["is_pre_close_window"] is True
+    assert "last_pre_close_run_at" in payload
+    assert "last_pre_close_result" in payload
+
+
+@pytest.mark.asyncio
+async def test_scheduler_outside_pre_close_window_market_closed_returns_market_closed(db_session, monkeypatch):
+    reset_scheduler_state()
+
+    class Factory:
+        def __call__(self):
+            return db_session
+
+    monkeypatch.setattr("app.services.scheduler_service.is_market_open", lambda current_datetime: False)
+    monkeypatch.setattr("app.services.scheduler_service.get_market_session_status", lambda current_datetime: "post_market")
+
+    result = await scheduler_service.run_scheduler_once(
+        Factory(),
+        datetime(2026, 6, 23, 16, 10, tzinfo=NEW_YORK),
+    )
+
+    assert result["status"] == "market_closed"
+    assert result["session_status"] == "post_market"
+
+
+@pytest.mark.asyncio
+async def test_scheduler_force_pre_close_runs_outside_window(db_session):
+    reset_scheduler_state()
+    calls = 0
+
+    class Factory:
+        def __call__(self):
+            return db_session
+
+    async def fake_confirmation_runner(db):
+        nonlocal calls
+        calls += 1
+        return []
+
+    result = await scheduler_service.run_scheduler_once(
+        Factory(),
+        datetime(2026, 6, 23, 10, 0, tzinfo=NEW_YORK),
+        fake_confirmation_runner,
+        force_pre_close=True,
+    )
+
+    assert result["status"] == "pre_close_confirmation_completed"
+    assert result["already_decided"] == 0
+    assert calls == 1
+    assert scheduler_service.last_confirmation_at is not None
+    assert scheduler_service.last_confirmation_result == result

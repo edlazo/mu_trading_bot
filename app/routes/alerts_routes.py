@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
@@ -23,6 +24,11 @@ def _alert_payload(alert: Alert) -> dict:
         "timeframe": alert.timeframe,
         "source": alert.source,
         "reason": alert.reason,
+        "close": alert.close,
+        "support": alert.support,
+        "resistance": alert.resistance,
+        "target": alert.target,
+        "stop_loss": alert.stop_loss,
         "score": alert.preliminary_score,
         "risk": alert.preliminary_risk,
         "entry_price": alert.entry_price,
@@ -45,6 +51,26 @@ def watchlist_alerts(db: Session = Depends(get_db)) -> list[dict]:
 @router.get("/archived", summary="Get archived alerts")
 def archived_alerts(db: Session = Depends(get_db)) -> list[dict]:
     return [_alert_payload(alert) for alert in list_archived_alerts(db)]
+
+
+@router.get("/by-ticker/{ticker}", summary="Get alerts by ticker")
+def alerts_by_ticker(ticker: str, db: Session = Depends(get_db)) -> list[dict]:
+    normalized_ticker = ticker.strip().upper()
+    alerts = (
+        db.query(Alert)
+        .filter(func.upper(Alert.ticker) == normalized_ticker)
+        .order_by(Alert.created_at.desc())
+        .all()
+    )
+    return [_alert_payload(alert) for alert in alerts]
+
+
+@router.get("/{alert_id}", summary="Get alert by id")
+def alert_by_id(alert_id: int, db: Session = Depends(get_db)) -> dict:
+    alert = db.get(Alert, alert_id)
+    if alert is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    return _alert_payload(alert)
 
 
 @router.patch("/{alert_id}/archive", summary="Archive alert")

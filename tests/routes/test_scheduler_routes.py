@@ -177,3 +177,53 @@ def test_scheduler_batch_advances_offset_and_resets(client, monkeypatch):
     assert second["has_more"] is False
     assert second["next_offset"] is None
     assert scheduler_service.scanner_batch_offset == 0
+
+
+def test_scheduler_status_includes_pre_close_fields(client):
+    reset_scheduler_state()
+
+    payload = client.get("/scheduler/status").json()
+
+    assert "last_pre_close_run_at" in payload
+    assert "last_pre_close_result" in payload
+    assert "scanner_batch_size" in payload
+    assert "scanner_next_offset" in payload
+    assert "is_pre_close_window" in payload
+
+
+def test_scheduler_run_once_uses_pre_close_window(client, monkeypatch):
+    reset_scheduler_state()
+    monkeypatch.setattr("app.services.scheduler_service.is_pre_close_window", lambda current_datetime: True)
+
+    response = client.post("/scheduler/run-once")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] in {"pre_close_confirmation_completed", "pre_close_skipped"}
+
+
+def test_scheduler_run_once_force_pre_close_updates_status(client):
+    reset_scheduler_state()
+
+    response = client.post("/scheduler/run-once?force_pre_close=true")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "pre_close_confirmation_completed"
+    assert "already_decided" in payload
+
+    status_payload = client.get("/scheduler/status").json()
+    assert status_payload["last_pre_close_run_at"] is not None
+    assert status_payload["last_pre_close_result"]["status"] == "pre_close_confirmation_completed"
+
+
+def test_scheduler_run_once_force_pre_close_does_not_run_twice(client):
+    reset_scheduler_state()
+
+    first = client.post("/scheduler/run-once?force_pre_close=true")
+    second = client.post("/scheduler/run-once?force_pre_close=true")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["status"] == "pre_close_already_ran"
+    assert "market_date" in second.json()
