@@ -12,7 +12,11 @@ from app.services.scheduler_service import get_scheduler_status
 
 def get_dashboard_summary(db: Session) -> DashboardSummaryResponse:
     settings = get_settings()
-    scheduler = get_scheduler_status(settings.enable_scheduler, settings.scheduler_interval_seconds)
+    scheduler = get_scheduler_status(
+        settings.enable_scheduler,
+        settings.scheduler_interval_seconds,
+        scanner_batch_size=settings.scanner_batch_size,
+    )
 
     scanner_summary = {
         "watchlist_enabled_count": db.query(WatchlistTicker).filter(WatchlistTicker.enabled.is_(True)).count(),
@@ -27,6 +31,11 @@ def get_dashboard_summary(db: Session) -> DashboardSummaryResponse:
         "is_running": scheduler["is_running"],
         "last_run_at": scheduler["last_run_at"],
         "last_result": scheduler["last_result"],
+        "last_pre_close_run_at": scheduler["last_pre_close_run_at"],
+        "last_pre_close_result": scheduler["last_pre_close_result"],
+        "scanner_batch_size": scheduler["scanner_batch_size"],
+        "scanner_next_offset": scheduler["scanner_next_offset"],
+        "is_pre_close_window": scheduler["is_pre_close_window"],
     }
 
     return DashboardSummaryResponse(

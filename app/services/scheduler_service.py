@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 from app.core.market_hours import (
     USA_MARKET_HOURS,
     get_market_session_status,
-    is_confirmation_time,
     is_market_open,
+    is_pre_close_window,
     is_weekday_market_day,
 )
 from app.models.decision import Decision
@@ -79,7 +79,13 @@ def _result_payload(result: ScannerWatchlistResult, batch_metadata: Optional[dic
     return payload
 
 
-def get_scheduler_status(enabled: bool, interval_seconds: int) -> dict:
+def get_scheduler_status(
+    enabled: bool,
+    interval_seconds: int,
+    scanner_batch_size: Optional[int] = None,
+    current_datetime: Optional[datetime] = None,
+) -> dict:
+    now = current_datetime or datetime.now(UTC)
     return {
         "enabled": enabled,
         "interval_seconds": interval_seconds,
@@ -89,16 +95,23 @@ def get_scheduler_status(enabled: bool, interval_seconds: int) -> dict:
         "last_confirmation_at": last_confirmation_at.isoformat() if last_confirmation_at else None,
         "last_confirmation_result": last_confirmation_result,
         "last_confirmation_date": last_confirmation_date.isoformat() if last_confirmation_date else None,
+        "last_pre_close_run_at": last_confirmation_at.isoformat() if last_confirmation_at else None,
+        "last_pre_close_result": last_confirmation_result,
+        "scanner_batch_size": scanner_batch_size,
+        "scanner_next_offset": scanner_batch_offset,
+        "is_pre_close_window": is_pre_close_window(now),
     }
 
 
-def _confirmation_result_payload(decisions: list[Decision]) -> dict:
+def _confirmation_result_payload(decisions: list[Decision], already_decided: int = 0) -> dict:
     confirmed = sum(1 for decision in decisions if decision.decision == "COMPRAMOS")
     rejected = sum(1 for decision in decisions if decision.decision == "NO_COMPRAMOS")
     return {
         "status": "pre_close_confirmation_completed",
         "confirmed": confirmed,
         "rejected": rejected,
+        "already_decided": already_decided,
+        "decisions_created": len(decisions),
         "decisions": [
             {
                 "ticker": decision.ticker,
@@ -138,6 +151,56 @@ async def run_scheduled_watchlist_scanner(
         alert_status=AlertStatus.EN_OBSERVACION,
         watchlist=False,
     )
+
+
+async def run_scheduled_pre_close_if_due(
+    db_session_factory,
+    current_datetime: Optional[datetime] = None,
+    confirmation_runner: ConfirmationRunner = run_pre_close_confirmation,
+    force: bool = False,
+) -> dict:
+    global last_confirmation_date, last_confirmation_at, last_confirmation_result, last_run_at, last_result
+
+    now = current_datetime or datetime.now(UTC)
+    market_datetime = now.astimezone(USA_MARKET_HOURS.timezone)
+    market_date = market_datetime.date()
+
+    if not force and not is_pre_close_window(market_datetime):
+        print("Scheduler pre-close skipped: outside window")
+        return {"status": "pre_close_skipped", "reason": "outside_window"}
+
+    print("Scheduler force pre-close requested" if force else "Scheduler detected pre-close window")
+    if last_confirmation_date == market_date:
+        print("Scheduler pre-close skipped: already executed for this market date")
+        return {
+            "status": "pre_close_already_ran",
+            "market_date": market_date.isoformat(),
+            "last_pre_close_result": last_confirmation_result,
+        }
+
+    db = db_session_factory()
+    try:
+        print("Scheduler running pre-close confirmations")
+        decisions = await run_scheduled_pre_close_confirmation(db, confirmation_runner)
+        last_confirmation_at = now
+        last_confirmation_date = market_date
+        last_confirmation_result = _confirmation_result_payload(decisions)
+        last_run_at = now
+        last_result = last_confirmation_result
+        print(
+            "Scheduler pre-close completed: "
+            f"decisions_created={last_confirmation_result['decisions_created']}"
+        )
+        return last_confirmation_result
+    except Exception as exc:
+        last_confirmation_at = now
+        last_confirmation_result = {"status": "error", "error": str(exc)}
+        last_run_at = now
+        last_result = last_confirmation_result
+        print(f"Scheduler confirmation error: {exc}")
+        return last_confirmation_result
+    finally:
+        db.close()
 
 
 async def run_scheduled_watchlist_scan(
@@ -182,8 +245,8 @@ async def run_scheduled_watchlist_scan(
                 scanner_batch_size,
                 scanner_batch_offset,
             )
+            print(f"Scheduler running scanner batch offset={batch_metadata['offset'] if batch_metadata else 0}")
             scanner_batch_offset = next_offset
-            print(f"Scheduler scanning {len(selected_tickers)} tickers")
             result = await scan_watchlist(
                 db,
                 selected_tickers,
@@ -209,6 +272,34 @@ async def run_scheduled_watchlist_scan(
         is_scan_running = False
 
 
+async def run_scheduler_once(
+    db_session_factory,
+    current_datetime: Optional[datetime] = None,
+    confirmation_runner: ConfirmationRunner = run_pre_close_confirmation,
+    watchlist_scanner_runner: Optional[WatchlistScannerRunner] = None,
+    scanner_batch_size: Optional[int] = None,
+    force_pre_close: bool = False,
+) -> dict:
+    now = current_datetime or datetime.now(UTC)
+    market_datetime = now.astimezone(USA_MARKET_HOURS.timezone)
+
+    if force_pre_close or (is_weekday_market_day(market_datetime) and is_pre_close_window(market_datetime)):
+        return await run_scheduled_pre_close_if_due(
+            db_session_factory,
+            current_datetime=now,
+            confirmation_runner=confirmation_runner,
+            force=force_pre_close,
+        )
+
+    print("Scheduler pre-close skipped: outside window")
+    return await run_scheduled_watchlist_scan(
+        db_session_factory,
+        current_datetime=now,
+        watchlist_scanner_runner=watchlist_scanner_runner,
+        scanner_batch_size=scanner_batch_size,
+    )
+
+
 async def run_scheduler_check(
     db_session_factory,
     current_datetime: Optional[datetime] = None,
@@ -216,52 +307,14 @@ async def run_scheduler_check(
     watchlist_scanner_runner: Optional[WatchlistScannerRunner] = None,
     scanner_batch_size: Optional[int] = None,
 ) -> bool:
-    global last_confirmation_date, last_confirmation_at, last_confirmation_result
-
-    now = current_datetime or datetime.now(UTC)
-    market_datetime = now.astimezone(USA_MARKET_HOURS.timezone)
-    market_date = market_datetime.date()
-
-    ran_anything = False
-
-    if is_weekday_market_day(market_datetime) and is_market_open(market_datetime):
-        await run_scheduled_watchlist_scan(
-            db_session_factory,
-            current_datetime=now,
-            watchlist_scanner_runner=watchlist_scanner_runner,
-            scanner_batch_size=scanner_batch_size,
-        )
-        ran_anything = True
-    else:
-        print(f"Market session status: {get_market_session_status(now)}")
-
-    if last_confirmation_date == market_date:
-        return ran_anything
-    if not is_weekday_market_day(market_datetime):
-        return ran_anything
-    if not is_confirmation_time(market_datetime):
-        return ran_anything
-
-    db = db_session_factory()
-    try:
-        decisions = await run_scheduled_pre_close_confirmation(db, confirmation_runner)
-        last_confirmation_at = now
-        last_confirmation_result = _confirmation_result_payload(decisions)
-        print(
-            "Scheduler pre-close confirmation completed: "
-            f"confirmed={last_confirmation_result['confirmed']} "
-            f"rejected={last_confirmation_result['rejected']}"
-        )
-    except Exception as exc:
-        last_confirmation_at = now
-        last_confirmation_result = {"status": "error", "error": str(exc)}
-        print(f"Scheduler confirmation error: {exc}")
-        return ran_anything
-    finally:
-        db.close()
-
-    last_confirmation_date = market_date
-    return True
+    result = await run_scheduler_once(
+        db_session_factory,
+        current_datetime=current_datetime,
+        confirmation_runner=confirmation_runner,
+        watchlist_scanner_runner=watchlist_scanner_runner,
+        scanner_batch_size=scanner_batch_size,
+    )
+    return result.get("status") != "pre_close_skipped"
 
 
 async def scheduler_loop(db_session_factory, interval_seconds: int = 300, scanner_batch_size: Optional[int] = None) -> None:
@@ -271,7 +324,7 @@ async def scheduler_loop(db_session_factory, interval_seconds: int = 300, scanne
     try:
         while True:
             try:
-                await run_scheduler_check(
+                await run_scheduler_once(
                     db_session_factory,
                     datetime.now(UTC),
                     scanner_batch_size=scanner_batch_size,

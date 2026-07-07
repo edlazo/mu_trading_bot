@@ -34,7 +34,11 @@ class DashboardSchedulerSummary(BaseModel):
     is_running: bool
     last_run_at: datetime | None
     last_result: dict | None
-
+    last_pre_close_run_at: datetime | None = None
+    last_pre_close_result: dict | None = None
+    scanner_batch_size: int | None = None
+    scanner_next_offset: int = 0
+    is_pre_close_window: bool = False
 
 class DashboardSummaryResponse(BaseModel):
     scanner: DashboardScannerSummary

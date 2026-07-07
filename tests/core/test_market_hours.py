@@ -12,6 +12,7 @@ from app.core.market_hours import (
     get_market_session_status,
     is_confirmation_time,
     is_market_open,
+    is_pre_close_window,
     is_weekday_market_day,
 )
 from app.main import app
@@ -85,3 +86,25 @@ def test_confirmation_time_uses_forward_only_tolerance_window(hour, minute, seco
     assert is_confirmation_time(current_datetime, tolerance_seconds=60) is expected
 
 
+
+
+@pytest.mark.parametrize(
+    ("hour", "minute", "expected"),
+    [
+        (15, 24, False),
+        (15, 25, True),
+        (15, 40, True),
+        (15, 55, True),
+        (15, 56, False),
+    ],
+)
+def test_pre_close_window_uses_wide_new_york_window(hour, minute, expected):
+    current_datetime = datetime(2026, 6, 23, hour, minute, tzinfo=NEW_YORK)
+
+    assert is_pre_close_window(current_datetime) is expected
+
+
+def test_pre_close_window_converts_from_utc_to_new_york():
+    current_datetime = datetime(2026, 6, 23, 19, 40, tzinfo=ZoneInfo("UTC"))
+
+    assert is_pre_close_window(current_datetime) is True
